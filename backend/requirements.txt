@@ -1,0 +1,13 @@
+Django==4.2.4
+celery==5.3.1
+mysqlclient==2.2.0
+websockets==11.0.3
+requests==2.31.0
+tradingview-ta
+mysql-connector-python==8.0.21
+undetected-chromedriver
+browsermob-proxy
+selenium-wire
+webdriver-manager
+pyppeteer
+pytz
