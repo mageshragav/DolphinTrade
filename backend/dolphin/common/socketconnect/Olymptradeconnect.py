@@ -1,6 +1,6 @@
-from websocket import create_connection
-import websocket
 import json
+from websocket import create_connection
+from websocket._exceptions import WebSocketConnectionClosedException
 from common.socketkey.olymptradekey import OlympTradeConnection
 from common.constants import HEADERS, OLYMP_WS
 import time
@@ -26,7 +26,7 @@ class OlympTradeClient:
                 self.ws.send(data)
                 response = self.ws.recv()
                 return json.loads(response)[0]['d']
-            except websocket.WebSocketConnectionClosedException:
+            except WebSocketConnectionClosedException:
                 self.connect()
         return False
 

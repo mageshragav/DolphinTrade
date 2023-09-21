@@ -13,3 +13,4 @@ pyppeteer
 pytz
 undetected-chromedriver
 telepot
+websocket-client
