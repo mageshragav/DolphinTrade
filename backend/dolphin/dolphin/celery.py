@@ -5,14 +5,14 @@ from celery.schedules import crontab
 
 # from triggerasset.views import OlympTradeTrigger
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'trading.settings')
-app = Celery('trading', broker='amqp://magesh:Magesh1@@localhost/trade')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'dolphin.settings')
+app = Celery('dolphin', broker='amqp://magesh:Magesh1@@localhost/trade')
 app.conf.timezone = 'UTC'
 
 
 @app.task
 def start_trade():
-    from triggerasset.views import OlympTradeTrigger
+    from tradingasset.views import OlympTradeTrigger
     client = OlympTradeTrigger()
     client.single_trigger()
 
