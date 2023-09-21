@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* CSS styles for the table */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        {% comment %} /* Apply a background color to the last header row */
+        th:last-child {
+            background-color: #f2f2f2;
+        } {% endcomment %}
+    </style>
+</head>
+
+{% block content %}
+  <table>
+    <thead>
+      <tr align='center'>
+        <th rowspan="2">ASSET NAME</th>
+        <th rowspan="2">RECOMMENDATION</th>
+        <th rowspan="2">BUY</th>
+        <th rowspan="2">SELL</th>
+        <th rowspan="2">NEUTRAL</th>
+        <th colspan='2'>Personal</th>
+      </tr>
+      <tr align='center'>
+        <th>BUY</th>
+        <th>SELL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td>{{ row.asset }}</td>
+          <td>{{ row.RECOMMENDATION }}</td>
+          <td>{{ row.BUY }}</td>
+          <td>{{ row.SELL }}</td>
+          <td>{{ row.NEUTRAL }}</td>
+          <td>{{ row.personal.BUY }}</td>
+          <td>{{ row.personal.SELL }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
