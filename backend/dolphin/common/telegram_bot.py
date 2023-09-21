@@ -1,6 +1,6 @@
 import telepot
 from common.constants import BOT_TOKEN, CHAT_ID, GROUP_ID
-from ..dolphin.celery import app
+from dolphin.celery import app
 bot = telepot.Bot(BOT_TOKEN)
 
 @app.task(name='send_telegram_message')   
