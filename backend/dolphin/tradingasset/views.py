@@ -20,10 +20,10 @@ class OlympTradeTrigger:
         print(f"Current {balance_key} Balance is : {self.balance}")
         pass
 
-    def db_entry(self,summary,mov_avg,indicators, data):
+    def db_entry(self,summary,mov_avg,indicators, data, oscillator):
         try:
             recomend = 1 if data['personal'] == 'BUY' else 2 if data['personal'] == 'SELL' else 3
-            direction = 1 if data['direction'] == 'up' else 'down'
+            direction = 1 if data['direction'] == 'up' else 2
             olymp_data = {"asset": data['asset'],"personal_recommend": data['personal'], "recommend": recomend,
                         "recommend_buy": summary['BUY'], 'recommend_sell': summary['SELL'], 'recommend_neutral': summary['NEUTRAL'],
                         "price": data['amount'], "timing": data['duration'], "direction": direction}
@@ -34,6 +34,9 @@ class OlympTradeTrigger:
             indicators_data = {"olymptrade": olymptrade[0], "open": indicators['open'], "close": indicators['close'], "low": indicators['low'],
                             "high": indicators['high'], "indictors": json.dumps(indicators)}
             indicators_obj = Indicators.objects.get_or_create(**indicators_data)
+            oscillator_data = {"olymptrade": olymptrade[0], "recommended": oscillator['RECOMMENDATION'], "buy": oscillator['BUY'],
+                               "sell": oscillator['SELL'], "neutral": oscillator['NEUTRAL'], "oscillators": json.dumps(oscillator['COMPUTE'])}
+            oscillator_obj = Osclillators.objects.get_or_create(**oscillator_data)
             return True
         except Exception as e:
             print(e.args)
@@ -54,14 +57,13 @@ class OlympTradeTrigger:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
                 data = {'personal': 'BUY','direction': 'up','asset': symbols, 'amount': '1', 'duration': '300'}
-                self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data)
                 # print(response_data)
                 
             elif recommend['SELL']:
                 response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
                 data = {'personal': 'SELL','direction': 'down','asset': symbols, 'amount': '1', 'duration': '300'}
-                self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data)
+            self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
                 # print(response_data)
                 
             return summary, recommend
