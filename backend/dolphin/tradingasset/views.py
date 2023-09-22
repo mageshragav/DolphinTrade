@@ -5,6 +5,7 @@ from common.constants import *
 from datetime import *
 from common.telegram_bot import send_telegram_message
 from tradingview_ta.main import Interval
+from django.utils import timezone
 # from trading.celery import app
 from django.shortcuts import render
 import json
@@ -50,7 +51,6 @@ class OlympTradeTrigger:
             msg = self.message_generator(signal_value=summary,asset='EURUSD',indicators=indicators,moving_avg=mov_avg)
             if recommend['BUY']:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
-                self.olymp_client.disconnect()
                 response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
                 data = {'personal': 'BUY','direction': 'up','asset': symbols, 'amount': '1', 'duration': '300'}
                 self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data)
@@ -58,7 +58,6 @@ class OlympTradeTrigger:
                 
             elif recommend['SELL']:
                 response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='300')
-                self.olymp_client.disconnect()
                 response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
                 data = {'personal': 'SELL','direction': 'down','asset': symbols, 'amount': '1', 'duration': '300'}
                 self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data)
@@ -70,7 +69,7 @@ class OlympTradeTrigger:
 
     def multi_trigger(self):
         try:
-            current_time = datetime.now(pytz.timezone('UTC')).astimezone(pytz.timezone('Asia/Kolkata'))
+            current_time = timezone.now().astimezone(pytz.timezone('America/New_York'))
             global value
             for timeing, assets in TIME_SYMBOL_MAPPING.items():
                 if timeing[0] <= current_time.replace(tzinfo=None) <= timeing[1]:
@@ -78,7 +77,9 @@ class OlympTradeTrigger:
                         summary, recommend = self.single_trigger(symbols=asset)
                         summary['asset'] = asset
                         summary['personal'] = recommend
+                        summary['date_time'] = current_time
                         value.append(summary)
+                    self.olymp_client.disconnect()
             # else:
             #     for asset in EUR_SYMBOLS:
             #         summary, recommend = self.single_trigger(symbols=asset)
@@ -106,7 +107,7 @@ class OlympTradeTrigger:
     
 def table_request(request):
     trigger = OlympTradeTrigger()
-    trigger.multi_trigger()
+    trigger.multi_trigger() 
     # summary['personal'] = recommond
     # global value
     # value.append(summary)
