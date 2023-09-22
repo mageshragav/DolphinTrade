@@ -48,3 +48,12 @@ class Indicators(models.Model):
     high = models.FloatField(default=0.0)
     indictors = models.JSONField()
     created_at = models.DateTimeField(auto_now=True)
+
+class Osclillators(models.Model):
+    olymptrade = models.ForeignKey(OlympTrade,related_name='osclillator_olymp_trade',on_delete=models.CASCADE)
+    recommended = models.IntegerField(choices=RECOMMENDED,blank=True,null=True)
+    buy = models.IntegerField(default=0,null=True,blank=True)
+    sell = models.IntegerField(default=0,null=True,blank=True)
+    neutral = models.IntegerField(default=0,null=True,blank=True)
+    oscillators = models.JSONField()
+    created_at = models.DateTimeField(auto_now=True)

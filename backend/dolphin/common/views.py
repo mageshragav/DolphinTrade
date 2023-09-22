@@ -60,7 +60,9 @@ class TradingViewApi:
     def personal_recommendation(self,data, oscillator):
         RSI = oscillator['COMPUTE']['RSI']
         MCAD = oscillator['COMPUTE']['MACD']
-        personal_recommond = 'SELL' if RSI in ('SELL','STRONG_SELL') and MCAD in ('SELL','STRONG_SELL') else 'BUY'
+        personal_recommond = ''
+        if not (RSI == 'NEUTRAL' or MCAD == 'NEUTRAL'):
+            personal_recommond = 'SELL' if RSI in ('SELL','STRONG_SELL') and MCAD in ('SELL','STRONG_SELL') else 'BUY'
         if data['RECOMMENDATION'] == 'STRONG_BUY':
             return {'BUY':True,'SELL':False}
         elif data['RECOMMENDATION'] == 'STRONG_SELL':
