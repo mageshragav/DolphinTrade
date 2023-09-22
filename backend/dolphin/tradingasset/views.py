@@ -45,7 +45,8 @@ class OlympTradeTrigger:
             self.trading_signal = TradingViewApi(symbols=symbols,screener=SCREENER,exchange=EXCHANGE,interval=five_min)
             signal = self.trading_signal.signal
             summary = self.trading_signal.get_summary(signal)
-            recommend = self.trading_signal.personal_recommendation(data=summary)
+            oscillator = self.trading_signal.get_oscillators(signal)
+            recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
             msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)

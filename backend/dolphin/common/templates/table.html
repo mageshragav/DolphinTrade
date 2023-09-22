@@ -42,7 +42,8 @@
     </thead>
     <tbody>
       {% for row in rows %}
-        <tr>
+        <tr {% if row.personal.BUY %}style="background-color: green;"{% elif row.personal.SELL %}
+          style="background-color: green;"{% else %}style="background-color: red;"{% endif %}>
           <td>{{ row.date_time }}</td>
           <td>{{ row.asset }}</td>
           <td>{{ row.RECOMMENDATION }}</td>
