@@ -63,8 +63,10 @@ class TradingViewApi:
         elif data['RECOMMENDATION'] == 'STRONG_SELL':
             return {'BUY':False,'SELL':True}
         else:
-            if data['BUY'] - data['SELL'] > 3 and data['NEUTRAL'] < 10:
-                return {'BUY':True,'SELL':False}
-            elif data['SELL'] - data['BUY'] > 3 and data['NEUTRAL'] < 10:
-                return {'BUY':False,'SELL':True}
+            if data['BUY'] > data['SELL']:
+                if data['BUY'] - data['SELL'] > 4 and data['NEUTRAL'] < 10:
+                    return {'BUY':True,'SELL':False}
+            else:
+                if data['SELL'] - data['BUY'] > 4 and data['NEUTRAL'] < 10:
+                    return {'BUY':False,'SELL':True}
         return {'BUY':False,'SELL':False}
