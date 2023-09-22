@@ -48,7 +48,7 @@ class OlympTradeTrigger:
             recommend = self.trading_signal.personal_recommendation(data=summary)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
-            msg = self.message_generator(signal_value=summary,asset='EURUSD',indicators=indicators,moving_avg=mov_avg)
+            msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)
             if recommend['BUY']:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
@@ -77,7 +77,7 @@ class OlympTradeTrigger:
                         summary, recommend = self.single_trigger(symbols=asset)
                         summary['asset'] = asset
                         summary['personal'] = recommend
-                        summary['date_time'] = current_time
+                        summary['date_time'] = timezone.now()
                         value.append(summary)
                     self.olymp_client.disconnect()
             # else:
