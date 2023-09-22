@@ -38,7 +38,7 @@ class OlympTradeConnection():
         return ''.join([random.choice(string.ascii_uppercase+string.digits) for n in range(18)])
     
     def get_bet_key(self,dir,pair,amount="1",duration="300"):
-        data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":"up","pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
+        data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":str(dir),"pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
         return data
     
     def get_wallet_key(self):
