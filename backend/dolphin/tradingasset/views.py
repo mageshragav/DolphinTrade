@@ -34,7 +34,8 @@ class OlympTradeTrigger:
             indicators_data = {"olymptrade": olymptrade[0], "open": indicators['open'], "close": indicators['close'], "low": indicators['low'],
                             "high": indicators['high'], "indictors": json.dumps(indicators)}
             indicators_obj = Indicators.objects.get_or_create(**indicators_data)
-            oscillator_data = {"olymptrade": olymptrade[0], "recommended": oscillator['RECOMMENDATION'], "buy": oscillator['BUY'],
+            oscilator_recommend = 1 if oscillator['RECOMMENDATION'] in ('BUY', 'STRONG_BUY') else 2 if oscillator['RECOMMENDATION'] in ('SELL','STRONG_SELL') else 3
+            oscillator_data = {"olymptrade": olymptrade[0], "recommended": oscilator_recommend, "buy": oscillator['BUY'],
                                "sell": oscillator['SELL'], "neutral": oscillator['NEUTRAL'], "oscillators": json.dumps(oscillator['COMPUTE'])}
             oscillator_obj = Osclillators.objects.get_or_create(**oscillator_data)
             return True
@@ -57,13 +58,14 @@ class OlympTradeTrigger:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
                 data = {'personal': 'BUY','direction': 'up','asset': symbols, 'amount': '1', 'duration': '300'}
+                self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
                 # print(response_data)
                 
             elif recommend['SELL']:
                 response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
                 data = {'personal': 'SELL','direction': 'down','asset': symbols, 'amount': '1', 'duration': '300'}
-            self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
+                self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
                 # print(response_data)
                 
             return summary, recommend
