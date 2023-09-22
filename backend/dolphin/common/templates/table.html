@@ -27,6 +27,7 @@
   <table>
     <thead>
       <tr align='center'>
+        <th rowspan="2">DATE AND TIME</th>
         <th rowspan="2">ASSET NAME</th>
         <th rowspan="2">RECOMMENDATION</th>
         <th rowspan="2">BUY</th>
@@ -42,6 +43,7 @@
     <tbody>
       {% for row in rows %}
         <tr>
+          <td>{{ row.date_time }}</td>
           <td>{{ row.asset }}</td>
           <td>{{ row.RECOMMENDATION }}</td>
           <td>{{ row.BUY }}</td>

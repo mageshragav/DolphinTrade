@@ -79,7 +79,7 @@ WSGI_APPLICATION = "dolphin.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'dolphin',
+        'NAME': 'dolphin_trade',
         'HOST': "localhost",
         'PORT': "3306",
         'USER': "root",

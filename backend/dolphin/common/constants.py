@@ -17,7 +17,7 @@ cur_dir = os.getcwd()
 #     'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
 # }
 cookies = {
-    'jwt_auth': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE2OTQ3MTQ0MzYsIm5iZiI6MTY5NDcxNDQzNiwiZXhwIjoxNjk0ODAwODM2LCJ1c2VyX2lkIjo0NjMwMDA4NCwiZW1haWwiOiJtYWdlc2htZ3IxQGdtYWlsLmNvbSJ9.XPwHcctFJLjDavq7OLGq5g4JQOi4yp8l-hXgJTlbfcBH3NSx39d2UOdCGfLdKL85bpqRryo6pn9Cyim4iGL-sv9q3kRsqHbdgT0UQ546RbcvdjRX8nRNFBr9NRYqXmIH5UyNT2LeLmSESt__4zBF_WtlUUX2QYerftk-cXTpSoxH5EaPwy8CX53pLyilROQ6bDPl1X6NQ7i-gppxgkt78e_6JV1_1u-gTjzFNIWNmhmPpFy7DUuZ0Oql_7vkRp5sQLT1yPvc7JqNAJZsM8se5WUoq2VVmesRvzHL_enQZ12tJ8mDV9GV1uCE92q_RG2ROT7rwb2CV3MZqavmf6HqtnKAQ6kjwCohGa-lLL4qXUfIF6shMxnhJ7uWLKHu8FJQ6Ltux7QGZ_0Do_aZ4O2oRDQy5gx2WD0juBEXRrQsB7y7diJe0lO7GcvcdiFtEyXIGHnkXAxNpaTD7hIWIlLWZpuWzRDr0ettnUEbQQbMTAUZKLelMqai2fzNXhPFXeMeGwWFEL9CMsUgv6WLO4EooURof0U8NOLZDpf2cm7XFaRrOpygrVzQd-OYQlHghN87uKjT874UQUb5L7OVEww3Tbofz0LgcTkvBn0Z8Nd1nDP9S4aWEMyyo1EFk1xdNQjOt-TUnahoZHe9JbEcKp-myYa7b-F4LhQJSOef3FlEVjc',
+    'jwt_auth': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE2OTUzMDUyMjQsIm5iZiI6MTY5NTMwNTIyNCwiZXhwIjoxNjk1MzkxNjI0LCJ1c2VyX2lkIjo0NjMwMDA4NCwiZW1haWwiOiJtYWdlc2htZ3IxQGdtYWlsLmNvbSJ9.CbjWYOSA7O2Bpl1yPM6TNCsMJ23ZulIJGMKHKXHKKu2aG_s7YGWZGdlyA8ikFDLAZtO7Sgr_1XiPmJcDAFv3IPWfQkQ6l6s8lWPa1dtQua0xOUiYIAbKDq63ueMYeoKpg-0bw6krnKREPGKxmXhpcUHjlH4-BO_hEjXv8E3h7s5YvGbyVbA4rNa2nBRkZm2UEs7myEmZmhaU-fKJyPSnSUTEPWkWWMkjn9giUxZj14WNTLejsMDDTUs3Y9MvRIbYUwTGt-Li6_4PB0JUxqwV1F2jtBCt2OUXdOlDyIfIwP2kGM1wQUATvVssJ5Ae50r_GxDjNgxOJhhmG37QCOCQWcpi2GQnlwhg3B6anmQ5otZ_NbFsKYXNIoPIbekB95gWZhEtRk_ntdt3ifiskMckZkvQz0EL-KYQ9nOb57er4YYyS0ZShKyOqCjhxwjNLVWhMIrFrVIbsoks_NMluWukjEq7ESRS17oyYYUu6WhOpE58OjWhCxQCYZUbqlOgxThbBpKmtF70M74vfxhH2-TJUjLOihyOJsGGuU15sn-iK5RVtSidujwjelbriTY_ySksrlj7dhhlv2Ewb2wHX7GGAbpieIXQmLRftfPVzdz3SfhOzf7BE0Vl5aeKWPfZj5029zuybW4YXSvVA7BuwBiROhXH1cY7TTGdbSX6hTCGO_Y',
     'access_token': 'PLACEHOLDER_JWT',
     }  
 cookies_str = '; '.join([f"{key}={value}" for key, value in cookies.items()])
@@ -56,8 +56,8 @@ TIME_SYMBOL_MAPPING = {
 }
 #####################TELEGRAM BOT CONSTANTS########################333
 
-IMAGE_GREEN= cur_dir+'/backend/trading/images/green.jpg'
-IMAGE_RED = cur_dir+'/backend/trading/images/red.jpg'
+IMAGE_GREEN= cur_dir+'/backend/dolphin/images/green.jpg'
+IMAGE_RED = cur_dir+'/backend/dolphin/images/red.jpg'
 
 #telegram client
 BOT_TOKEN = 'PLACEHOLDER_BOT_TOKEN'
