@@ -6,11 +6,12 @@ from datetime import *
 from common.telegram_bot import send_telegram_message
 from tradingview_ta.main import Interval
 from django.utils import timezone
+from django.http import HttpResponse
 # from trading.celery import app
 from django.shortcuts import render
 import json
 # Create your views here.
-value = list()
+# value = list()
 class OlympTradeTrigger:
     def __init__(self) -> None:
         # symbols,screener,exchange,interval
@@ -27,17 +28,21 @@ class OlympTradeTrigger:
             olymp_data = {"asset": data['asset'],"personal_recommend": data['personal'], "recommend": recomend,
                         "recommend_buy": summary['BUY'], 'recommend_sell': summary['SELL'], 'recommend_neutral': summary['NEUTRAL'],
                         "price": data['amount'], "timing": data['duration'], "direction": direction}
-            olymptrade = OlympTrade.objects.get_or_create(**olymp_data)
-            moving_avg_data = {"olymptrade": olymptrade[0], "recommend": recomend, "recommend_buy": mov_avg['BUY'],
-                            "recommend_sell": mov_avg['SELL'], "all_mvavg": json.dumps(mov_avg)}
-            moving_avg = MovingAvg.objects.get_or_create(**moving_avg_data)
-            indicators_data = {"olymptrade": olymptrade[0], "open": indicators['open'], "close": indicators['close'], "low": indicators['low'],
-                            "high": indicators['high'], "indictors": json.dumps(indicators)}
-            indicators_obj = Indicators.objects.get_or_create(**indicators_data)
-            oscilator_recommend = 1 if oscillator['RECOMMENDATION'] in ('BUY', 'STRONG_BUY') else 2 if oscillator['RECOMMENDATION'] in ('SELL','STRONG_SELL') else 3
-            oscillator_data = {"olymptrade": olymptrade[0], "recommended": oscilator_recommend, "buy": oscillator['BUY'],
-                               "sell": oscillator['SELL'], "neutral": oscillator['NEUTRAL'], "oscillators": json.dumps(oscillator['COMPUTE'])}
-            oscillator_obj = Osclillators.objects.get_or_create(**oscillator_data)
+            five_min = timezone.now()-timedelta(minutes=5)
+            if not OlympTrade.objects.filter(asset=data['asset'], created_at__range=[five_min,timezone.now()]).exists():
+                olymptrade = OlympTrade.objects.create(**olymp_data)
+                moving_avg_data = {"olymptrade": olymptrade, "recommend": recomend, "recommend_buy": mov_avg['BUY'],
+                                "recommend_sell": mov_avg['SELL'], "all_mvavg": json.dumps(mov_avg)}
+                moving_avg = MovingAvg.objects.create(**moving_avg_data)
+                indicators_data = {"olymptrade": olymptrade, "open": indicators['open'], "close": indicators['close'], "low": indicators['low'],
+                                "high": indicators['high'], "indictors": json.dumps(indicators)}
+                indicators_obj = Indicators.objects.create(**indicators_data)
+                oscilator_recommend = 1 if oscillator['RECOMMENDATION'] in ('BUY', 'STRONG_BUY') else 2 if oscillator['RECOMMENDATION'] in ('SELL','STRONG_SELL') else 3
+                oscillator_data = {"olymptrade": olymptrade, "recommended": oscilator_recommend, "buy": oscillator['BUY'],
+                                "sell": oscillator['SELL'], "neutral": oscillator['NEUTRAL'], "oscillators": json.dumps(oscillator['COMPUTE'])}
+                oscillator_obj = Osclillators.objects.create(**oscillator_data)
+            else:
+                print('trade will not accept for last five minutes')
             return True
         except Exception as e:
             print(e.args)
@@ -50,9 +55,9 @@ class OlympTradeTrigger:
             signal = self.trading_signal.signal
             summary = self.trading_signal.get_summary(signal)
             oscillator = self.trading_signal.get_oscillators(signal)
-            recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
+            recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator, indicator=indicators)
             msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)
             if recommend['BUY']:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
@@ -67,6 +72,8 @@ class OlympTradeTrigger:
                 data = {'personal': 'SELL','direction': 'down','asset': symbols, 'amount': '1', 'duration': '300'}
                 self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
                 # print(response_data)
+            summary['RSI'] = indicators['RSI']
+            summary['MACD'] = oscillator['COMPUTE']['MACD']
                 
             return summary, recommend
         except Exception as e:
@@ -74,17 +81,20 @@ class OlympTradeTrigger:
 
     def multi_trigger(self):
         try:
+            value = list()
             current_time = timezone.now().astimezone(pytz.timezone('America/New_York'))
-            global value
             for timeing, assets in TIME_SYMBOL_MAPPING.items():
                 if timeing[0] <= current_time.replace(tzinfo=None) <= timeing[1]:
                     for asset in assets:
-                        summary, recommend = self.single_trigger(symbols=asset)
-                        summary['asset'] = asset
-                        summary['personal'] = recommend
-                        summary['date_time'] = timezone.now()
-                        value.append(summary)
+                        five_min = timezone.now() - timedelta(minutes=5)
+                        if not OlympTrade.objects.filter(asset=asset, created_at__range=[five_min,timezone.now()]).exists():
+                            summary, recommend = self.single_trigger(symbols=asset)
+                            summary['asset'] = asset
+                            summary['personal'] = recommend
+                            summary['date_time'] = timezone.now().strftime("%d/%m/%Y %H:%M:%S")
+                            value.append(summary)
                     self.olymp_client.disconnect()
+            return value
             # else:
             #     for asset in EUR_SYMBOLS:
             #         summary, recommend = self.single_trigger(symbols=asset)
@@ -112,9 +122,10 @@ class OlympTradeTrigger:
     
 def table_request(request):
     trigger = OlympTradeTrigger()
-    trigger.multi_trigger() 
+    value = trigger.multi_trigger() 
     # summary['personal'] = recommond
     # global value
     # value.append(summary)
     print(value)
-    return render(request,'table.html',context={"rows":value})
+    return HttpResponse(json.dumps(value))
+    # return render(request,'table.html',context={"rows":value})

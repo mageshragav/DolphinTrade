@@ -30,7 +30,7 @@ class OlympTradeClient:
                 self.connect()
         return False
 
-    def get_bet(self, direction, pair, amount="1", duration="300"):
+    def get_bet(self, direction, pair, amount="1", duration="60"):
         bet_key = self.key.get_bet_key(dir=direction, pair=pair, amount=amount, duration=duration)
         print(bet_key)
         bet_key = json.dumps(bet_key)
