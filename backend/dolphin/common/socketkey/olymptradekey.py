@@ -22,6 +22,7 @@ class OlympTradeConnection():
         ws.send(key)
         print(key)
         print('[{"t":2,"e":98,"uuid":"'+self.generateUuid()+'","d":[54]}]')
+        # [{"t":2,"e":31,"uuid":"nTF3CI","d":[{"account_id":2073645904,"group":"real"}]}]
         data = json.loads(ws.recv())
         ws.close()
         return data[0]['d']
@@ -37,7 +38,7 @@ class OlympTradeConnection():
     def generateUuid(self):
         return ''.join([random.choice(string.ascii_uppercase+string.digits) for n in range(18)])
     
-    def get_bet_key(self,dir,pair,amount="1",duration="300"):
+    def get_bet_key(self,dir,pair,amount="1",duration="60"):
         data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":str(dir),"pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
         return data
     

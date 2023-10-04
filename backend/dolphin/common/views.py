@@ -57,28 +57,31 @@ class TradingViewApi:
         # 'SMA200': 'BUY', 'Ichimoku': 'NEUTRAL', 'VWMA': 'SELL', 'HullMA': 'BUY'}}
         return mv
     
-    def personal_recommendation(self,data, oscillator):
+    def personal_recommendation(self,data, oscillator, indicator):
         RSI = oscillator['COMPUTE']['RSI']
         MCAD = oscillator['COMPUTE']['MACD']
-        personal_recommond = ''
-        if not (RSI == 'NEUTRAL' or MCAD == 'NEUTRAL'):
-            personal_recommond = 'SELL' if RSI in ('SELL','STRONG_SELL') and MCAD in ('SELL','STRONG_SELL') else 'BUY'
+        personal_recommond = 'NEUTRAL'
         if data['RECOMMENDATION'] == 'STRONG_BUY':
             return {'BUY':True,'SELL':False}
         elif data['RECOMMENDATION'] == 'STRONG_SELL':
             return {'BUY':False,'SELL':True}
-        else:
-            # if data['BUY'] > data['SELL']:
-            #     if data['BUY'] - data['SELL'] > 4 and data['NEUTRAL'] < 10:
-            #         return {'BUY':True,'SELL':False}
-            # else:
-            #     if data['SELL'] - data['BUY'] > 4 and data['NEUTRAL'] < 10:
-            #         return {'BUY':False,'SELL':True}
-            if data['NEUTRAL'] < 10:
-                if data['BUY'] > 12 and data['SELL'] < 5:
-                    if personal_recommond == 'BUY':
-                        return {'BUY':True,'SELL':False}
-                elif data['SELL'] > 12 and data['BUY'] < 5:
-                    if personal_recommond == 'SELL':
-                        return {'BUY':False,'SELL':True}
         return {'BUY':False,'SELL':False}
+    
+    def FiveMinStrategie():
+        # momo strategie
+        pass
+
+    def TenMinStrategie():
+        pass
+
+    def FifteenMinStrategie():
+        pass
+
+    def ThirtyMinStrategie():
+        pass
+
+    # one of the strategie used for 5 mins chart
+    def MomoStrategie():
+        # EMA - 20 (Period)
+        # MACD - EMA-12, SLOW EMA-26,SIGNAL_LINE-9
+        pass
