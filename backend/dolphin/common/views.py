@@ -51,21 +51,51 @@ class TradingViewApi:
     def get_moving_avg(self,signal):
         mv = self.analysis(signal).moving_averages
         #{'RECOMMENDATION': 'BUY', 'BUY': 9, 'SELL': 5, 'NEUTRAL': 1, 
-        # 'COMPUTE': {'EMA10': 'SELL', 'SMA10': 'SELL', 'EMA20': 'SELL',
+        # 'COMPUTE': {'SMA5': 'SELL', 'SMA10': 'SELL', 'EMA20': 'SELL',
         # 'SMA20': 'SELL', 'EMA30': 'BUY', 'SMA30': 'BUY', 'EMA50': 'BUY',
-        # 'SMA50': 'BUY', 'EMA100': 'BUY', 'SMA100': 'BUY', 'EMA200': 'BUY',
+        # 'SMA50': 'BUY', 'SMA50': 'BUY', 'SMA100': 'BUY', 'EMA200': 'BUY',
         # 'SMA200': 'BUY', 'Ichimoku': 'NEUTRAL', 'VWMA': 'SELL', 'HullMA': 'BUY'}}
         return mv
     
-    def personal_recommendation(self,data, oscillator, indicator):
+    def personal_recommendation(self,data, oscillator, indicator, mv):
         RSI = oscillator['COMPUTE']['RSI']
         MCAD = oscillator['COMPUTE']['MACD']
-        personal_recommond = 'NEUTRAL'
-        if data['RECOMMENDATION'] == 'STRONG_BUY':
+        MOM = oscillator['COMPUTE']['Mom']
+        BBP = oscillator['COMPUTE']['BBP']
+        CCI = oscillator['COMPUTE']['CCI']
+        WR = oscillator['COMPUTE']['W%R']
+        STOCHK = oscillator['COMPUTE']['STOCH.K']
+        STOCHRSI = oscillator['COMPUTE']['Stoch.RSI']
+        EMA5 = 'SELL' if indicator['EMA5'] > indicator['close'] else 'BUY'
+        SMA5 = 'SELL' if indicator['SMA5'] > indicator['close'] else 'BUY'
+        os_data = {'RSI': RSI,'MACD':MCAD,'MOM':MOM,'BBP':BBP,'CCI':CCI,'WR':WR}
+        buy_value = [True if i == 'BUY' else False for i in {'MACD':MCAD,'MOM':MOM}.values()]
+        sell_value = [True if i == 'SELL' else False for i in {'MACD':MCAD,'MOM':MOM}.values()]
+        os_sell_count = [True if i == 'SELL' else False for i in os_data.values()]
+        os_buy_count = [True if i == 'BUY' else False for i in os_data.values()]
+        if any([True if i == 'BUY' else False for i in [STOCHK,STOCHRSI]]) and WR == 'BUY' and CCI == 'BUY':
             return {'BUY':True,'SELL':False}
-        elif data['RECOMMENDATION'] == 'STRONG_SELL':
+        elif any([True if i == 'SELL' else False for i in [STOCHK,STOCHRSI]]) and WR == 'SELL' and CCI == 'SELL':
             return {'BUY':False,'SELL':True}
+        elif all(buy_value):
+            if EMA5 == 'BUY' and SMA5 == 'BUY' and MCAD == 'BUY':
+                return {'BUY':True,'SELL':False}
+            elif os_buy_count.count(True) >= 2:
+                return {'BUY':True,'SELL':False}
+        elif all(sell_value):
+            if EMA5 == 'SELL' and SMA5 == 'SELL' and MCAD == 'SELL':
+                return {'BUY':False,'SELL':True}
+            elif os_sell_count.count(True) >= 2:
+                return {'BUY':False,'SELL':True}
         return {'BUY':False,'SELL':False}
+        # personal_recommond = 'NEUTRAL'
+        # if data['RECOMMENDATION'] in ('STRONG_BUY', 'BUY'):
+        #     # if (EMA5 in 'BUY' or SMA5 in 'BUY') and MOM in 'BUY':
+        #     return {'BUY':True,'SELL':False}
+        # elif data['RECOMMENDATION'] in ('STRONG_SELL', 'SELL'):
+        #     # if (EMA5 in 'SELL' or SMA5 in 'SELL') and MOM in 'SELL':
+        #     return {'BUY':False,'SELL':True}
+        # return {'BUY':False,'SELL':False}
     
     def FiveMinStrategie():
         # momo strategie
