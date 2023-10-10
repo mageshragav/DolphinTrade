@@ -57,7 +57,7 @@ class OlympTradeTrigger:
             oscillator = self.trading_signal.get_oscillators(signal)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
-            recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator, indicator=indicators)
+            recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator, indicator=indicators,mv=mov_avg)
             msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)
             if recommend['BUY']:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
@@ -74,6 +74,10 @@ class OlympTradeTrigger:
                 # print(response_data)
             summary['RSI'] = indicators['RSI']
             summary['MACD'] = oscillator['COMPUTE']['MACD']
+            oscillator.update(indicators)
+            mv_ag = mov_avg['COMPUTE']
+            oscillator.update(mv_ag)
+            summary['TOTAL'] = json.dumps(oscillator)
                 
             return summary, recommend
         except Exception as e:
@@ -89,10 +93,11 @@ class OlympTradeTrigger:
                         five_min = timezone.now() - timedelta(minutes=5)
                         if not OlympTrade.objects.filter(asset=asset, created_at__range=[five_min,timezone.now()]).exists():
                             summary, recommend = self.single_trigger(symbols=asset)
-                            summary['asset'] = asset
-                            summary['personal'] = recommend
-                            summary['date_time'] = timezone.now().strftime("%d/%m/%Y %H:%M:%S")
-                            value.append(summary)
+                            if recommend['SELL'] or recommend['BUY']:
+                                summary['asset'] = asset
+                                summary['personal'] = recommend
+                                summary['date_time'] = timezone.now().strftime("%d/%m/%Y %H:%M:%S")
+                                value.append(summary)
                     self.olymp_client.disconnect()
             return value
             # else:
@@ -122,7 +127,7 @@ class OlympTradeTrigger:
     
 def table_request(request):
     trigger = OlympTradeTrigger()
-    value = trigger.multi_trigger() 
+    value = trigger.multi_trigger()
     # summary['personal'] = recommond
     # global value
     # value.append(summary)
