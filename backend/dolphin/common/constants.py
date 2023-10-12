@@ -18,7 +18,7 @@ cur_dir = os.getcwd()
 # }
 cookies = {
     'access_token': 'PLACEHOLDER_JWT',
-    'jwt_auth': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE2OTY4NTcwNDksIm5iZiI6MTY5Njg1NzA0OSwiZXhwIjoxNjk2OTQzNDQ5LCJ1c2VyX2lkIjo0NjMwMDA4NCwiZW1haWwiOiJtYWdlc2htZ3IxQGdtYWlsLmNvbSJ9.Ha8XJVisUDVcKt8tqiTvX49lIuc4FFQuOVkhwSYKbGgttVsHAL3MwpMAT3PWbFPha39uqSMrxJL1EAQ4zRZLDrVrpAmcw_e4bSAnD_pbDjrqdsB7SlrZrED8fvbe-p5M2Op4qTzGPbwnh7gly4HHJBFe36rJ9oGhenSG7pLh68Uo8xB6hqOnGbVXmlyjEV4d8K_oHSwfyb-5kUS8gfxLWuJBKNbrSW8GjJeEkRpUVjkn16gmGJPHdpJv2Wl_gZpUzAVgVrCMbc6YPg1uaTxbfXeZ-qh4O0vOiYBNwdlRZRz6ePIk9DAK2W4LV6QVudAgRy1IwNRrrIvkVaVgbFPzwQNHVLcgIgGcuRouNRqqIYo9n81Mx7uGhf4jRQShhNm2W8JiAP_7fKnFk2ysyfjVOIF9wapOj7hbDCP80hbK8i-Q2FX-LtWqLDa0v1l1koIkRA54tPiSz2Wi65GREcXXckJQCwvmE3BkbuzilJ-pZmKSWBYqUAO28eIQiZ_SpsrNcUsZosJEYA6zcbaGln4TwWe8OlL1JUIpSWP7LHahCvjZobE4W37TkIBIoNVj3k-_mPh9tugvydLDifrsqCCI5_dfysqIgVRygKBd5IU4idtN9Q_j2WE0MK4VS1ASX8CSwAj8pnUjGMdIqZoLa6ryND32kyHT_ghsHckeRW_R8ow',
+    'jwt_auth': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE2OTcwMDQ5MjYsIm5iZiI6MTY5NzAwNDkyNiwiZXhwIjoxNjk3MDkxMzI2LCJ1c2VyX2lkIjo0NjMwMDA4NCwiZW1haWwiOiJtYWdlc2htZ3IxQGdtYWlsLmNvbSJ9.ngoBd2TssdT-GyPXDeKpwgufxVfow4HDbmoQoBa3R1kIswahVXs9wpjnRyrufZXEZ-GdAuB3VPN2ZTj9Gan-aQ4ePVbPCYVtOEK_7QKj_sYsf-uRrZ6N3dPdU_PZwiere0wlka-byx28eH4TbnfQXf1Xd-Cpf1Mh-7ekNCkca8wvH6U5MoFE_pliXJ00Ff9uv6ToaWbJgn63H2dvxxWcYsX7n-NW6liYz6XCB51DrwJSX-EjZtOfIRooXtw0dYodaD4rCSPOO3RwB9ogvSTfWKIomXLw8lh5XN12FJGVDcQEZSp9J-NAqpy2vm6z6OjNpANNZaiwLyHpVPWwxk3wzNjGpMJxKYG66uOBVfHCbwPsy856Xkdn93o3jHf4e6QsVrJFaX156xV5wM4ZrLy3V8YqVnRlPq_6ZzygKzh0uQ2br6PM_jA-BtzcMW5bAbgktcYvalvRDwYFQuk0xAq2Cf1PwI__0hD7A_09Q9oFJ_GhBf86dhqxf5Zv0JswALSXMCLpMJwKjbI-2xNQG2zzbH29WNUTNUB2-9A4T6TQZLK-VXP33p5zZwKRW2VeYbHvRfkDDgIFYK2yfAJiPAjsi7hgbUybDT18IectJ-VtnyR8lVl9aiZUVm3VIB3x274VYlFmR1zPS4RfZ5USEsL2IYBQKPJuGMOCzZjpE2Z5cHk',
     }  
 cookies_str = '; '.join([f"{key}={value}" for key, value in cookies.items()])
 # HEADERS = {
@@ -61,17 +61,18 @@ OLYMP_WS = r"wss://ws.olymptrade.com/otp?cid_ver=1&cid_app=web%40OlympTrade%4020
 #############TRADING VIEW CONSTANTS################
 EXCHANGE = 'FX_IDC'
 SCREENER = 'forex'
-EUR_SYMBOLS = ['EURUSD','EURCAD'] #'EURAUD' #,'EURJPY'
-GBP_SYMBOLS = ['GBPUSD','GBPAUD','GBPCAD','GBPJPY']
+EUR_SYMBOLS = ['EURUSD','EURCAD','EURJPY','EURAUD'] #'EURAUD' #,'EURJPY'
+GBP_SYMBOLS = ['GBPUSD','GBPAUD','GBPCAD'] #,'GBPJPY'
 CAD_SYMBOLS = ['CADJPY','CADCHF']
 AUD_SYMBOLS = ['AUDJPY','AUDUSD','AUDCHF','AUDNZD','AUDCAD'] 
 USD_SYMBOLS = ['USDCAD','USDJPY','USDCHF']
-COMMON_SYMBOLS = GBP_SYMBOLS+['AUDJPY','AUDUSD']+EUR_SYMBOLS
+# COMMON_SYMBOLS = GBP_SYMBOLS+['AUDJPY','AUDUSD']+EUR_SYMBOLS
+COMMON_SYMBOLS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','CADJPY','GBPAUD','GBPCAD','EURCAD','EURGBP']
 # COMMON_SYMBOLS = ['AUDCAD']
 ##############based on indian timings#################
 #FROM 5.30AM TO 2.30PM
 current_date_time = datetime.now(pytz.timezone('UTC')).astimezone(pytz.timezone('Asia/Kolkata'))
-TIME_5_30 = datetime.now().replace(hour=0,minute=30)
+TIME_5_30 = datetime.now().replace(hour=0,minute=0)
 TIME_14_30 = datetime.now().replace(hour=23,minute=30)
 # SYMBOLS_LIST_5_TO_2 = ['AUDNZD','AUDJPY','AUDUSD','USDJPY','GBPUSD','USDCHF']
 SYMBOLS_LIST_5_TO_2 = COMMON_SYMBOLS

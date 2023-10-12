@@ -40,6 +40,8 @@ class OlympTradeConnection():
     
     def get_bet_key(self,dir,pair,amount="1",duration="60"):
         data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":str(dir),"pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
+        # forex key
+        # data = [{"t":2,"e":1032,"uuid":f"{self.generateUuid()}","d":[{"amount":3,"multiplicator":500,"dir":str(dir),"pair":str(pair),"stop_loss":{"type":"amount","value":-1,"trailing":False},"take_profit":{"type":"amount","value":2,"trailing":False},"group":"demo","account_id":2747795093}]}]
         return data
     
     def get_wallet_key(self):

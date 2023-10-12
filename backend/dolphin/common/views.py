@@ -59,6 +59,8 @@ class TradingViewApi:
     
     def personal_recommendation(self,data, oscillator, indicator, mv):
         RSI = oscillator['COMPUTE']['RSI']
+        IRSI = indicator['RSI']
+        IRSI1 = indicator['RSI[1]']
         MCAD = oscillator['COMPUTE']['MACD']
         MOM = oscillator['COMPUTE']['Mom']
         BBP = oscillator['COMPUTE']['BBP']
@@ -66,36 +68,23 @@ class TradingViewApi:
         WR = oscillator['COMPUTE']['W%R']
         STOCHK = oscillator['COMPUTE']['STOCH.K']
         STOCHRSI = oscillator['COMPUTE']['Stoch.RSI']
+        SMA100 = mv['COMPUTE']['SMA100']
+        SMA200 = mv['COMPUTE']['SMA200']
+        EMA100 = mv['COMPUTE']['EMA100']
+        EMA200 = mv['COMPUTE']['EMA200']
         EMA5 = 'SELL' if indicator['EMA5'] > indicator['close'] else 'BUY'
         SMA5 = 'SELL' if indicator['SMA5'] > indicator['close'] else 'BUY'
-        os_data = {'RSI': RSI,'MACD':MCAD,'MOM':MOM,'BBP':BBP,'CCI':CCI,'WR':WR}
-        buy_value = [True if i == 'BUY' else False for i in {'MACD':MCAD,'MOM':MOM}.values()]
-        sell_value = [True if i == 'SELL' else False for i in {'MACD':MCAD,'MOM':MOM}.values()]
-        os_sell_count = [True if i == 'SELL' else False for i in os_data.values()]
-        os_buy_count = [True if i == 'BUY' else False for i in os_data.values()]
-        if any([True if i == 'BUY' else False for i in [STOCHK,STOCHRSI]]) and WR == 'BUY' and CCI == 'BUY':
-            return {'BUY':True,'SELL':False}
-        elif any([True if i == 'SELL' else False for i in [STOCHK,STOCHRSI]]) and WR == 'SELL' and CCI == 'SELL':
-            return {'BUY':False,'SELL':True}
-        elif all(buy_value):
-            if EMA5 == 'BUY' and SMA5 == 'BUY' and MCAD == 'BUY':
+        EMAS = [SMA100,SMA200,EMA100,EMA200]
+        if MOM == 'BUY' and MCAD == 'BUY':
+            # and all([True if i == 'BUY' else False for i in (EMA5,SMA5)]) \
+            if IRSI < IRSI1 and indicator['CCI20'] < -100:
                 return {'BUY':True,'SELL':False}
-            elif os_buy_count.count(True) >= 2:
-                return {'BUY':True,'SELL':False}
-        elif all(sell_value):
-            if EMA5 == 'SELL' and SMA5 == 'SELL' and MCAD == 'SELL':
-                return {'BUY':False,'SELL':True}
-            elif os_sell_count.count(True) >= 2:
-                return {'BUY':False,'SELL':True}
+        elif MOM == 'SELL' and MCAD == 'SELL':
+            # and all([True if i == 'SELL' else False for i in (EMA5,SMA5)]) \
+            if IRSI > IRSI1 and indicator['CCI20'] > 150:
+                return {'BUY':False,'SELL':True}    
+        
         return {'BUY':False,'SELL':False}
-        # personal_recommond = 'NEUTRAL'
-        # if data['RECOMMENDATION'] in ('STRONG_BUY', 'BUY'):
-        #     # if (EMA5 in 'BUY' or SMA5 in 'BUY') and MOM in 'BUY':
-        #     return {'BUY':True,'SELL':False}
-        # elif data['RECOMMENDATION'] in ('STRONG_SELL', 'SELL'):
-        #     # if (EMA5 in 'SELL' or SMA5 in 'SELL') and MOM in 'SELL':
-        #     return {'BUY':False,'SELL':True}
-        # return {'BUY':False,'SELL':False}
     
     def FiveMinStrategie():
         # momo strategie
