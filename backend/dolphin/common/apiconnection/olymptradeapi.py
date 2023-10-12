@@ -49,10 +49,10 @@ class OlympTradeAPI:
         # "closed_from": 1696824000,
         # "closed_to": 1696910399
         # }
-        data = {"limit": 200, "account_id": int(self.account_id), "cursor": ""}
+        data = {"limit": 10, "account_id": int(self.account_id), "cursor": ""}
         if date_time is not None:
-            from_timestamp = (date_time.replace(day=2,hour=0,minute=1)).timestamp()
-            to_timestamp = (date_time.replace(day=2,hour=23,minute=59)).timestamp()
+            from_timestamp = (date_time.replace(hour=1,minute=0)).timestamp()
+            to_timestamp = (date_time.replace(hour=23,minute=59)).timestamp()
             data.update({"closed_from":from_timestamp,"closed_to":to_timestamp})
         # data = {"limit": 70, "account_id": int(self.account_id), "cursor": ""}
         return requests.post("https://gw.olymptrade.com/api/history/deals/ftt/v1",headers=DEALS_HEADERS,json=data).json()
@@ -81,3 +81,24 @@ class OlympTradeAPI:
         get_analysis['trade_open'] = f"{datetime.utcfromtimestamp(get_result['deals'][0]['time_open'])}"
         get_analysis['trade_close'] = f"{datetime.utcfromtimestamp(get_result['deals'][-1]['time_open'])}"
         return get_analysis
+    
+    def get_detail_analysis(self,date_time=None):
+        get_analysis = list()
+        get_result = self.getHistory(date_time)
+        for i in get_result['deals']:
+            result = dict()
+            result['pair'] = i['pair']
+            result['dir'] = i['dir']
+            result['status'] = i['status']
+            result['time_open'] = f"{datetime.utcfromtimestamp(i['time_open'])}"
+            result['time_close'] = f"{datetime.utcfromtimestamp(i['time_close'])}"
+            result['open'] = i['curs_open']
+            result['close'] = i['curs_close']
+            result['test_result'] = 'draw'
+            if i['status'] == 'loose':
+                result['test_result'] = 'failure'
+            elif i['status'] == 'win':
+                result['test_result'] = 'success'
+            get_analysis.append(result)
+        return get_analysis
+    

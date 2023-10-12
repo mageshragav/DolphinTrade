@@ -19,5 +19,7 @@ from django.urls import path
 from tradingasset.views import *
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path('signal/',table_request,name='signal')
+    path('signal/',table_request,name='signal'),
+    path('report/',get_report,name='report'),
+    path('detail-report/',get_detail_report,name='detail-report')
 ]

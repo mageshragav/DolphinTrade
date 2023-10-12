@@ -134,3 +134,52 @@ def table_request(request):
     print(value)
     return HttpResponse(json.dumps(value))
     # return render(request,'table.html',context={"rows":value})
+
+def get_report(request):
+    import gspread
+    from common.apiconnection.olymptradeapi import OlympTradeAPI
+    from oauth2client.service_account import ServiceAccountCredentials
+    scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+        ]
+    credentials = ServiceAccountCredentials.from_json_keyfile_name('backend/dolphin/google-credentials.json', scopes)
+    gc = gspread.authorize(credentials)
+    s = OlympTradeAPI()
+    date_time = datetime.now()
+    date_str = date_time.strftime("%d/%m/%Y, %H:%M:%S")
+    get_report = s.get_profit_lose_analysis(date_time)
+    summary = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('summary')
+    summary_list = list()
+    summary_list.append([date_str,get_report['total_trade'],get_report['win'],get_report['loose'],get_report['draw'],get_report['win_ratio'],get_report['loose_ratio'],get_report['trade_open'],get_report['trade_close']])
+    summary.append_rows(summary_list)
+    return HttpResponse("Success")
+
+def get_detail_report(request):
+    import gspread
+    from dateutil.parser import parse
+    from common.apiconnection.olymptradeapi import OlympTradeAPI
+    from oauth2client.service_account import ServiceAccountCredentials
+    scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+        ]
+    credentials = ServiceAccountCredentials.from_json_keyfile_name('backend/dolphin/google-credentials.json', scopes)
+    gc = gspread.authorize(credentials)
+    s = OlympTradeAPI()
+    date_time = datetime.now()
+    summary_list = list()
+    date_str = date_time.strftime("%d/%m/%Y, %H:%M:%S")
+    get_reports = s.get_detail_analysis(date_time)
+    summary = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('details')
+    column_values = summary.col_values(4)
+    last_row_value = column_values[-1]
+    summary_list.append(['PAIR', 'DIR', 'STATUS', 'TIME_OPEN', 'TIME_CLOSE', 'OPEN', 'CLOSE', 'TEST_RESULT'])
+    date_time = parse(last_row_value)
+    summary.clear()
+    for get_report in get_reports:
+        summary_list.append([get_report['pair'],get_report['dir'],get_report['status'],get_report['time_open'],get_report['time_close'], get_report['open'],get_report['close'],get_report['test_result']])
+    print(last_row_value)
+    print(type(last_row_value))
+    summary.append_rows(summary_list)
+    return HttpResponse("Success")
