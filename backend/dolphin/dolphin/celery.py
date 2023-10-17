@@ -33,14 +33,14 @@ def sheet_update(response=None):
         ]
         credentials = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scopes)
         gc = gspread.authorize(credentials)
-        sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('Sheet9')
+        sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('Sheet11')
         headers = ['DATE AND TIME', 'ASSET NAME', 'RECOMMENDATION', 'BUY', 'SELL','NEUTRAL', 'TOTAL']  # Replace with your actual field names
         first_row_values = sheet.row_values(1)
         if first_row_values != headers:
             sheet.insert_row(headers, 1)
         data = []
         for obj in response:
-            if obj['RECOMMENDATION'] in ('BUY','SELL','STRONG_BUY', 'STRONG_SELL'):
+            if obj['personal']['BUY'] or obj['personal']['SELL']:
                 five_min = timezone.now()-timedelta(minutes=5)
                 # if not OlympTrade.objects.filter(asset=obj['asset'], created_at__range=[five_min,timezone.now()]).exists():
                 data.append([obj['date_time'],obj['asset'],obj['RECOMMENDATION'],

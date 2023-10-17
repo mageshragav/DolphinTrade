@@ -49,7 +49,7 @@ class OlympTradeAPI:
         # "closed_from": 1696824000,
         # "closed_to": 1696910399
         # }
-        data = {"limit": 10, "account_id": int(self.account_id), "cursor": ""}
+        data = {"limit": 100, "account_id": int(self.account_id), "cursor": ""}
         if date_time is not None:
             from_timestamp = (date_time.replace(hour=1,minute=0)).timestamp()
             to_timestamp = (date_time.replace(hour=23,minute=59)).timestamp()

@@ -66,6 +66,7 @@ class TradingViewApi:
         BBP = oscillator['COMPUTE']['BBP']
         CCI = oscillator['COMPUTE']['CCI']
         WR = oscillator['COMPUTE']['W%R']
+        HullMA = mv['COMPUTE']['HullMA']
         STOCHK = oscillator['COMPUTE']['STOCH.K']
         STOCHRSI = oscillator['COMPUTE']['Stoch.RSI']
         SMA100 = mv['COMPUTE']['SMA100']
@@ -75,14 +76,18 @@ class TradingViewApi:
         EMA5 = 'SELL' if indicator['EMA5'] > indicator['close'] else 'BUY'
         SMA5 = 'SELL' if indicator['SMA5'] > indicator['close'] else 'BUY'
         EMAS = [SMA100,SMA200,EMA100,EMA200]
-        if MOM == 'BUY' and MCAD == 'BUY':
-            # and all([True if i == 'BUY' else False for i in (EMA5,SMA5)]) \
-            if IRSI < IRSI1 and indicator['CCI20'] < -100:
-                return {'BUY':True,'SELL':False}
-        elif MOM == 'SELL' and MCAD == 'SELL':
-            # and all([True if i == 'SELL' else False for i in (EMA5,SMA5)]) \
-            if IRSI > IRSI1 and indicator['CCI20'] > 150:
-                return {'BUY':False,'SELL':True}    
+        if MCAD in 'BUY' and MOM in 'BUY' and RSI in ('NEUTRAL', 'BUY'):
+            if mv['RECOMMENDATION'] in ('BUY', 'STRONG_BUY'):
+                if IRSI < IRSI1 and (EMA5 in 'BUY' and SMA5 in 'BUY'):
+                    return {'BUY':True,'SELL':False}
+                elif HullMA in 'BUY' and (EMA5 in 'BUY' and SMA5 in 'BUY'):
+                    return {'BUY':False,'SELL':True}
+        elif MCAD in 'SELL' and MOM in 'SELL' and RSI in ('NEUTRAL', 'SELL'):
+            if mv['RECOMMENDATION'] in ('SELL', 'STRONG_SELL'):
+                if IRSI > IRSI1 and (EMA5 in 'SELL' and SMA5 in 'SELL'):
+                    return {'BUY':False,'SELL':True}
+                elif HullMA in 'SELL' and (EMA5 in 'SELL' and SMA5 in 'SELL'):
+                    return {'BUY':False,'SELL':True}   
         
         return {'BUY':False,'SELL':False}
     
