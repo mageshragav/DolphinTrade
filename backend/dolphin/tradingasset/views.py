@@ -57,6 +57,9 @@ class OlympTradeTrigger:
             oscillator = self.trading_signal.get_oscillators(signal)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
+            print("=======================================")
+            print(symbols,summary,oscillator,indicators,mov_avg)
+            print('=======================================')
             recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator, indicator=indicators,mv=mov_avg)
             msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)
             if recommend['BUY']:
@@ -175,7 +178,8 @@ def get_detail_report(request):
     column_values = summary.col_values(4)
     last_row_value = column_values[-1]
     summary_list.append(['PAIR', 'DIR', 'STATUS', 'TIME_OPEN', 'TIME_CLOSE', 'OPEN', 'CLOSE', 'TEST_RESULT'])
-    date_time = parse(last_row_value)
+    if last_row_value != 'TIME_OPEN':
+        date_time = parse(last_row_value)
     summary.clear()
     for get_report in get_reports:
         summary_list.append([get_report['pair'],get_report['dir'],get_report['status'],get_report['time_open'],get_report['time_close'], get_report['open'],get_report['close'],get_report['test_result']])
