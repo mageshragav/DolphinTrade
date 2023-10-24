@@ -33,7 +33,7 @@ def sheet_update(response=None):
         ]
         credentials = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.json', scopes)
         gc = gspread.authorize(credentials)
-        sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('Sheet11')
+        sheet = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('Sheet12')
         headers = ['DATE AND TIME', 'ASSET NAME', 'RECOMMENDATION', 'BUY', 'SELL','NEUTRAL', 'TOTAL']  # Replace with your actual field names
         first_row_values = sheet.row_values(1)
         if first_row_values != headers:
