@@ -54,26 +54,30 @@ class OlympTradeTrigger:
             self.trading_signal = TradingViewApi(symbols=symbols,screener=SCREENER,exchange=EXCHANGE,interval=five_min)
             signal = self.trading_signal.signal
             summary = self.trading_signal.get_summary(signal)
+            summary['asset'] = symbols
             oscillator = self.trading_signal.get_oscillators(signal)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
-            print("=======================================")
-            print(symbols,summary,oscillator,indicators,mov_avg)
-            print('=======================================')
             recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator, indicator=indicators,mv=mov_avg)
             msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)
+            # response = send_telegram_message.apply_async(args=('', msg))
             if recommend['BUY']:
                 response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
                 data = {'personal': 'BUY','direction': 'up','asset': symbols, 'amount': '1', 'duration': '300'}
                 self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
                 # print(response_data)
-                
+                print(f"================TRADING SUCCESS WITH BUY {symbols}=======================")
+                print(symbols,summary,oscillator,indicators,mov_avg)
+                print('================TRADING SUCCESS WITH BUY END=======================')
             elif recommend['SELL']:
                 response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='300')
                 response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
                 data = {'personal': 'SELL','direction': 'down','asset': symbols, 'amount': '1', 'duration': '300'}
                 self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
+                print(f"================TRADING SUCCESS WITH SELL {symbols}=======================")
+                print(symbols,summary,oscillator,indicators,mov_avg)
+                print('================TRADING SUCCESS WITH SELL END=======================')
                 # print(response_data)
             summary['RSI'] = indicators['RSI']
             summary['MACD'] = oscillator['COMPUTE']['MACD']
@@ -126,7 +130,87 @@ class OlympTradeTrigger:
         moving_ag = moving_avg['RECOMMENDATION']
         recommendation = f"Recommendation are buy {buy_value}, sell {sell_value}, neutral_value {neutral_value} and moving average was {moving_ag}"
         msg = f"In the upcoming {5} minutes from {current_time} on {current_date},opening price {open} and PUT {recommend} for the {asset_val} asset. {recommendation}"
-        return msg
+        # html_css_content = """
+        #     <html>
+        #         <head>
+        #             <style>
+        #                 body {
+        #                 font-family: Arial, sans-serif;
+        #                 background-color: #f2f2f2;
+        #                 }
+
+        #                 .signal-card {
+        #                 background-color: #fff;
+        #                 border-radius: 10px;
+        #                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        #                 width: 300px;
+        #                 margin: 20px auto;
+        #                 padding: 20px;
+        #                 }
+
+        #                 h1 {
+        #                 color: #333;
+        #                 font-size: 24px;
+        #                 margin: 0;
+        #                 }
+
+        #                 .signal-info {
+        #                 margin-top: 10px;
+        #                 }
+
+        #                 .info-label {
+        #                 font-weight: bold;
+        #                 margin-right: 5px;
+        #                 }
+
+        #                 .buy {
+        #                 color: #4CAF50;
+        #                 }
+
+        #                 .sell {
+        #                 color: #F44336;
+        #                 }
+
+        #                 .mov-avg {
+        #                 margin-top: 10px;
+        #                 }
+
+        #                 .strong-buy {
+        #                 background-color: #4CAF50;
+        #                 color: #fff;
+        #                 padding: 5px 10px;
+        #                 border-radius: 5px;
+        #                 }     
+        #             </style>
+        #         </head>"""+\
+        #         f"""<body>
+        #             <div class="signal-card">
+        #                 <h1>SIGNAL: {recommend}</h1>
+        #                 <div class="signal-info">
+        #                 <span class="info-label">SYMBOL:</span> {asset_val}<br>
+        #                 <span class="info-label">TIME:</span> {5} MINS<br>
+        #                 <span class="info-label">OPEN:</span> {open}<br>
+        #                 <span class="info-label">OSCILLATOR:</span>
+        #                 <span class="buy">BUY: {buy_value}</span>
+        #                 <span class="sell">SELL: {sell_value}</span><br>
+        #                 </div>
+        #                 <div class="mov-avg">
+        #                 <span class="info-label">MOV AVG:</span> <span class="strong-buy">{moving_ag}</span>
+        #                 </div>
+        #             </div>
+        #         </body>"""+\
+        #     """</html>
+        # """
+        html_css_content =f"SIGNAL: {recommend}\n"+\
+                f"SYMBOL: {asset_val}\n"+\
+                f"TIME: 5 MINS\n"+\
+                f"OPEN: {open}\n"+\
+                f"RECOMMANDED SIGNALS:\n"+\
+                f"BUY: {buy_value}\n"+\
+                f"SELL: {sell_value}\n"+\
+                f"MOV AVG: {moving_ag}"
+
+        return html_css_content
     
 def table_request(request):
     trigger = OlympTradeTrigger()
