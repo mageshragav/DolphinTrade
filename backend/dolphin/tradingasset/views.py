@@ -7,6 +7,7 @@ from common.telegram_bot import send_telegram_message
 from tradingview_ta.main import Interval
 from django.utils import timezone
 from django.http import HttpResponse
+import pandas as pd
 # from trading.celery import app
 from django.shortcuts import render
 import json
@@ -116,6 +117,34 @@ class OlympTradeTrigger:
         except Exception as e:
             print(e.args)
 
+    def data_creation(self):
+        df = pd.DataFrame()
+        for symbol in USD_SYMBOLS:
+            mov = dict()
+            five_min = Interval.INTERVAL_5_MINUTES
+            self.trading_signal = TradingViewApi(symbols=symbol,screener=SCREENER,exchange=EXCHANGE,interval=five_min)
+            signal = self.trading_signal.signal
+            oscillator = self.trading_signal.get_oscillators(signal)
+            print(oscillator)
+            mov_avg = self.trading_signal.get_moving_avg(signal=signal)
+            indicators = self.trading_signal.get_indicators(signal=signal)
+            oscillator['COMPUTE']['SYMBOL'] = symbol
+            oscillator['COMPUTE']['OPEN'] = indicators['open']
+            oscillator['COMPUTE']['CLOSE'] = indicators['close']
+            oscillator['COMPUTE']['DATA/TIME'] = datetime.strftime(datetime.now(),'%Y-%m-%d %H:%M:%S')
+            print(mov_avg)
+            mov = {"Ichimoku": mov_avg['COMPUTE']['Ichimoku'], "VWMA": mov_avg['COMPUTE']['VWMA'], "HullMA": mov_avg['COMPUTE']['HullMA']}
+            oscillator['COMPUTE'].update(mov)
+            self.olymp_client.get_bet('up',symbol,amount='1',duration='300')
+            if len(df) == 0:
+                df = pd.DataFrame([oscillator['COMPUTE']])
+            else:
+                df.loc[len(df)] = oscillator['COMPUTE']
+        self.olymp_client.disconnect()
+        put_excel(df)
+        return 'success'
+
+
 
     def message_generator(self,signal_value, asset,indicators,moving_avg):
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -222,6 +251,12 @@ def table_request(request):
     return HttpResponse(json.dumps(value))
     # return render(request,'table.html',context={"rows":value})
 
+
+def data_generation(*args, **kwargs):
+    olymp = OlympTradeTrigger()
+    data = olymp.data_creation()
+    return HttpResponse('sucess')
+
 def get_report(request):
     import gspread
     from common.apiconnection.olymptradeapi import OlympTradeAPI
@@ -271,3 +306,29 @@ def get_detail_report(request):
     print(type(last_row_value))
     summary.append_rows(summary_list)
     return HttpResponse("Success")
+
+
+def put_excel(data):
+    import gspread
+    from common.apiconnection.olymptradeapi import OlympTradeAPI
+    from oauth2client.service_account import ServiceAccountCredentials
+    
+    scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+        ]
+    credentials = ServiceAccountCredentials.from_json_keyfile_name('backend/dolphin/google-credentials.json', scopes)
+    gc = gspread.authorize(credentials)
+    summary = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('PREDICT')
+    # Extract column names as headers
+    headers = list(data.columns)
+
+    # Convert DataFrame values to a list of lists
+    values = data.values.tolist()
+
+    # Update the first row with headers and subsequent rows with values
+    summary.update('A1', [headers])
+    # summary_list = list()
+    # summary_list.append(data)
+    summary.append_rows(values)
+    return 'success'

@@ -21,5 +21,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path('signal/',table_request,name='signal'),
     path('report/',get_report,name='report'),
-    path('detail-report/',get_detail_report,name='detail-report')
+    path('detail-report/',get_detail_report,name='detail-report'),
+    path('generate-data/',data_generation,name='data-creation')
 ]

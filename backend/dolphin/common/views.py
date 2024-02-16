@@ -68,8 +68,10 @@ class TradingViewApi:
         WR = oscillator['COMPUTE']['W%R']
         WRR = indicator['W.R']
         HullMA = mv['COMPUTE']['HullMA']
-        STOCHK = oscillator['COMPUTE']['STOCH.K']
-        STOCHRSI = oscillator['COMPUTE']['Stoch.RSI']
+        STOCHK = indicator['Stoch.K']
+        MACD_LINE = indicator['MACD.macd']
+        MACD_SIGNAL_LINE = indicator['MACD.signal']
+        STOCHD = indicator['Stoch.D']
         SMA100 = mv['COMPUTE']['SMA100']
         SMA200 = mv['COMPUTE']['SMA200']
         EMA100 = mv['COMPUTE']['EMA100']
@@ -78,37 +80,21 @@ class TradingViewApi:
         SMA5 = 'SELL' if indicator['SMA5'] > indicator['close'] else 'BUY'
         EMAS = [SMA100,SMA200,EMA100,EMA200]
         print(f"-------********{data['asset']}********------------")
-        print(f"MCAD: {MCAD},\nMOM: {MOM},\nRSI: {RSI},\nWRR: {WRR},\nEMA5: {EMA5},\nSMA5: {SMA5},\nHullMA: {HullMA},\nIRSI: {IRSI},\nIRSI1: {IRSI1}")
+        print(f"MACD_LINE: {MACD_LINE},\nMACD_SIGNAL_LINE: {MACD_SIGNAL_LINE},\nSTOCHD: {STOCHD}\n,STOCHK: {STOCHK}\n,MCAD: {MCAD},\nMOM: {MOM},\nRSI: {RSI},\nWRR: {WRR},\nEMA5: {EMA5},\nSMA5: {SMA5},\nHullMA: {HullMA},\nIRSI: {IRSI},\nIRSI1: {IRSI1}")
         print(f"oscillator: {oscillator['RECOMMENDATION']},\nmoving avg: {mv['RECOMMENDATION']}")
         print(f"-------********{data['asset']}********------------")
-        # if int(IRSI) == int(IRSI1):
-        #     print(f"{data['asset']} returning false because of rsi warning")
-        #     return {'BUY':False,'SELL':False}
-        if MCAD in 'BUY' and MOM in 'BUY' and RSI in ('NEUTRAL', 'BUY'):
-            if mv['RECOMMENDATION'] in ('BUY', 'STRONG_BUY') and oscillator['RECOMMENDATION'] in 'BUY':
-                if (EMA5 in 'BUY' and SMA5 in 'BUY') and HullMA == 'BUY':
-                    if WRR < -80 and IRSI > IRSI1:
-                        print(f"{data['asset']} returning true because of wrr implement")
-                        return {'BUY':False,'SELL':True}
-                    elif WRR > -20 and IRSI < IRSI1:
-                        print(f"{data['asset']} returning true because of rsi implement")
-                        return {'BUY':True,'SELL':False}
-                    # elif WRR < -75 and IRSI > IRSI1:
-                    #     print(f"{data['asset']} returning true because of wrr implement")
-                        return {'BUY':False,'SELL':True}
-        elif MCAD in 'SELL' and MOM in 'SELL' and RSI in ('NEUTRAL', 'SELL'):
-            if mv['RECOMMENDATION'] in ('SELL', 'STRONG_SELL') and oscillator['RECOMMENDATION'] in 'SELL':
-                if (EMA5 in 'SELL' and SMA5 in 'SELL') and HullMA == 'SELL':
-                    if WRR > -20 and IRSI < IRSI1:
-                        print(f"{data['asset']} returning true because of wrr implement")
-                        return {'BUY':True,'SELL':False}
-                    elif WRR < -80 and IRSI < IRSI1:
-                        print(f"{data['asset']} returning true because of rsi implement")
-                        return {'BUY':False,'SELL':True}
-                    # elif WRR > -25 and IRSI < IRSI1:
-                    #     print(f"{data['asset']} returning true because of wrr implement")
-                    #     return {'BUY':True,'SELL':False}
-
+        if STOCHK <= 20 and STOCHD <= 20:
+            if STOCHK > STOCHD and WRR <= -80:
+                if CCI < -100 and (MACD_LINE <= 0 and MACD_SIGNAL_LINE <= 0) and MCAD in 'BUY':
+                    return {'BUY':True,'SELL':False}
+                # if oscillator['RECOMMENDATION'] in 'BUY' and HullMA in 'BUY':
+                #     return {'BUY':True,'SELL':False}
+        elif STOCHK >=70 and STOCHK >=70:
+            if STOCHK < STOCHD and WRR >= -20:
+                if CCI > 100 and (MACD_LINE >= 0 and MACD_SIGNAL_LINE >= 0) and MCAD in 'SELL':
+                    return {'BUY':False,'SELL':True}
+                # if oscillator['RECOMMENDATION'] in 'SELL' and HullMA in 'SELL':
+                #     return {'BUY':False,'SELL':True}
         return {'BUY':False,'SELL':False}
     
     def FiveMinStrategie():
