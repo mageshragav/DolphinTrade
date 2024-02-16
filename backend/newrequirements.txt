@@ -1,0 +1,15 @@
+Django
+celery
+mysqlclient
+websockets
+requests
+tradingview-ta
+mysql-connector-python
+websocket-client
+pyTelegramBotAPI
+pandas
+numpy
+gspread
+oauth2client
+alpha-vantage
+ta
