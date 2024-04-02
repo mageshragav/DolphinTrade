@@ -39,7 +39,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "common",
     "tradingasset",
-    "users"
+    "users",
+    "TradingDataGeneration"
 ]
 
 MIDDLEWARE = [
