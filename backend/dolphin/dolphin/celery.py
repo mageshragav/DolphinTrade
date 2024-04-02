@@ -8,6 +8,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from django.utils import timezone
 from datetime import timedelta, datetime
+from celery.schedules import schedule
 
 
 
@@ -21,7 +22,7 @@ def start_trade():
     response = requests.get("http://localhost:8001/signal/")
     print(response.status_code)
     print(response.json())
-    sheet_update.apply_async(args=[response.json()])
+    # sheet_update.apply_async(args=[response.json()])
 
 @app.task(task_name='sheet_update')
 def sheet_update(response=None):
@@ -54,9 +55,20 @@ def sheet_update(response=None):
         print(e.args)
         return False
 
+
+@app.task
+def update():
+    response = requests.get("http://localhost:8001/generate-data/")
+    print(response.status_code)
+    print(response.json())
+    
 app.conf.beat_schedule = {
     'run-every-minute': {
         'task': 'dolphin.celery.start_trade',
-        'schedule': 300
+        'schedule': crontab("*", "*", "*", "*", "*")
     },
+    # 'run-every-5-minute': {
+    #     'task': 'dolphin.celery.update',
+    #     'schedule': crontab(minute='*')
+    # },
 }
