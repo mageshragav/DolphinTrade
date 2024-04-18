@@ -13,7 +13,7 @@ import pandas as pd
 from django.shortcuts import render
 import json
 from TradingDataGenerate import main
-from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg
+from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg,sma_indicator
 from ta.momentum import rsi,stochrsi_d,stochrsi_k,stochrsi
 import numpy as np
 # Create your views here.
@@ -24,7 +24,8 @@ class OlympTradeTrigger:
         balance_key = 'demo' #real
         self.olymp_client = OlympTradeClient(group='demo')
         self.balance = self.olymp_client.balance
-        self.ml_model = pickle.load(open('backend/dolphin/xgbclassifier.sav','rb'))
+        self.ml_model = pickle.load(open('backend/dolphin/rfclassifier_15.sav','rb'))
+        self.ml_model2 = pickle.load(open('backend/dolphin/xgbclassifier_15.sav','rb'))
         # self.ml_model = pickle.load(open('backend/dolphin/combineclassifier.sav','rb'))
         # self.ml_model_15 = pickle.load(open('backend/dolphin/xgbclassifier_15.sav','rb'))
         self.s = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
@@ -59,7 +60,7 @@ class OlympTradeTrigger:
             return False
 
     @staticmethod
-    def calculate(pd: pd.DataFrame) -> pd.DataFrame:
+    def calculate(pd: pd.DataFrame,predict=True):
         pdrsi = rsi(pd['close'],14)
         # rsi.dropna(axis=0,inplace=True)
         pdcci = cci(pd['high'],pd['low'],pd['close'],14)
@@ -87,44 +88,78 @@ class OlympTradeTrigger:
         pd2['stochrsi_d'] = pdstochrsi_d
         pd2['stochrsi_k'] = pdstochrsi_k
         pd2['stochrsi'] = pdstochrsi
+        # pd2['RSI'] = pdrsi.apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype(int)
+        # pd2['CCI'] = pdcci.apply(lambda x: 1 if x < -100 else 2 if x > 100 else 0).astype(int)
+        # conditions_3 = (pd2['stochrsi'] > 80) & (pd2['stochrsi_k'] < pd2['stochrsi_d'])
+        # conditions_4 = (pd2['stochrsi'] < 20) & (pd2['stochrsi_k'] > pd2['stochrsi_d'])
+        # pd2['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0)).astype(int)
+        pd2['ADX'] = np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] > pd2['adx_neg']), 1, np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype(int)
+        # pd2['MCAD'] = np.where((pd2['macd'] > pd2['macd_signal']), 1, np.where(pd2['macd'] < pd2['macd_signal'], 2, 0)).astype(int)
+        pd2['next_close'] = pd2['close'].shift(-1)
+        pd2.dropna(axis=0,inplace=True)
+        # pd2.drop(columns=['adx','adx_pos','adx_neg','macd','macd_signal','stochrsi','stochrsi_d','stochrsi_k'],axis=1,inplace=True)
+        # condition = (sum([pd2['RSI'],pd2['CCI'],pd2['STOCH.RSI'],pd2['ADX'],pd2['MCAD']]) > 2)
+        pd2['Prediction'] = np.where(pd2['ADX'] == 1 & (pd2['open'] < pd2['next_close']), 1,
+                                np.where(pd2['ADX'] == 2 & (pd2['open'] > pd2['next_close']), 2, 0)).astype(int)
+        pd2.drop(columns=['next_close','ADX'], inplace=True)
         return pd2
     
+    @staticmethod
+    def confirm_trend(pddata: pd.DataFrame):
+        cci_os = cci(pddata['high'],pddata['low'],pddata['close'],21)
+        sma_trend_high = sma_indicator(pddata['high'],21)
+        sma_trend_low = sma_indicator(pddata['low'],21)
+        print(cci_os.iloc[-1], pddata.iloc[-1]['open'], sma_trend_high.iloc[-1], sma_trend_low.iloc[-1])
+        if cci_os.iloc[-1] > 50 and sma_trend_high.iloc[-1] < pddata.iloc[-1]['open']:
+            print('buy')
+            return 'buy'
+        elif cci_os.iloc[-1] < -50 and sma_trend_low.iloc[-1] > pddata.iloc[-1]['open']:
+            print('sell')
+            return 'sell'
+        else:
+            print('netrual')
+            return 'netrual'
 
     def start_trading(self, symbols='EURUSD'):
         import random
         symbols = random.choice(ALL_SYMBOLS)
         print(symbols)
-        response_data = self.s.get_hist(symbol=symbols,exchange='FX',interval=main.Interval.in_5_minute,n_bars=300,extended_session=False)
+        response_data = self.s.get_hist(symbol=symbols,exchange='FX',interval=main.Interval.in_15_minute,n_bars=300,extended_session=False)
         result_pd = OlympTradeTrigger.calculate(response_data)
-        adx_condition = ((result_pd['adx'] > 25.00) & (result_pd['adx'] < 30.00))
-        result_pd['RSI_1'] = np.where(result_pd['rsi'] < 30, 1, np.where(result_pd['rsi'] > 70, 2, 0))
-        result_pd['ADX_1'] = np.where((result_pd['adx'] > 25.00) & (result_pd['adx_pos'] < result_pd['adx_neg']), 1, np.where((result_pd['adx'] > 25.00) & (result_pd['adx_pos'] > result_pd['adx_neg']), 2, 0))
-        conditions_3 = (result_pd['stochrsi'] > 0.75) & (result_pd['stochrsi_k'] < result_pd['stochrsi_d'])
-        conditions_4 = (result_pd['stochrsi'] < 0.25) & (result_pd['stochrsi_k'] > result_pd['stochrsi_d'])
-        result_pd['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0))
-        result_pd['ADX_1'] = np.where(adx_condition & (result_pd['adx_pos'] < result_pd['adx_neg']), 1, np.where(adx_condition & (result_pd['adx_pos'] > result_pd['adx_neg']), 2, 0))
-        conditions_3 = (result_pd['stochrsi'] > 0.75) & (result_pd['stochrsi_k'] < result_pd['stochrsi_d'])
-        conditions_4 = (result_pd['stochrsi'] < 0.25) & (result_pd['stochrsi_k'] > result_pd['stochrsi_d'])
-        result_pd['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0))
-        # result_pd['RSI_1'] = result_pd['RSI_1'] = np.where(result_pd['rsi'] < 30, 1, np.where(result_pd['rsi'] > 70, 2, 0))
-        result_pd.dropna(inplace=True)
-        result_pd.reset_index()
+        # adx_condition = ((result_pd['adx'] > 25.00) & (result_pd['adx'] < 30.00))
+        # result_pd['RSI_1'] = np.where(result_pd['rsi'] < 30, 1, np.where(result_pd['rsi'] > 70, 2, 0))
+        # result_pd['ADX_1'] = np.where((result_pd['adx'] > 25.00) & (result_pd['adx_pos'] < result_pd['adx_neg']), 1, np.where((result_pd['adx'] > 25.00) & (result_pd['adx_pos'] > result_pd['adx_neg']), 2, 0))
+        # conditions_3 = (result_pd['stochrsi'] > 0.75) & (result_pd['stochrsi_k'] < result_pd['stochrsi_d'])
+        # conditions_4 = (result_pd['stochrsi'] < 0.25) & (result_pd['stochrsi_k'] > result_pd['stochrsi_d'])
+        # result_pd['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0))
+        # result_pd['ADX_1'] = np.where(adx_condition & (result_pd['adx_pos'] < result_pd['adx_neg']), 1, np.where(adx_condition & (result_pd['adx_pos'] > result_pd['adx_neg']), 2, 0))
+        # conditions_3 = (result_pd['stochrsi'] > 0.75) & (result_pd['stochrsi_k'] < result_pd['stochrsi_d'])
+        # conditions_4 = (result_pd['stochrsi'] < 0.25) & (result_pd['stochrsi_k'] > result_pd['stochrsi_d'])
+        # result_pd['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0))
+        # # result_pd['RSI_1'] = result_pd['RSI_1'] = np.where(result_pd['rsi'] < 30, 1, np.where(result_pd['rsi'] > 70, 2, 0))
+        # result_pd.dropna(inplace=True)
+        # result_pd.reset_index()
         print(result_pd.iloc[-1])
-        data_1 = result_pd.iloc[-1,5:].to_dict()
+        data_1 = result_pd.iloc[-1,5:-1].to_dict()
         data_1 = pd.DataFrame({key: [value] for key, value in data_1.items()})
         print(data_1)
         ml_output = self.ml_model.predict(data_1)
+        ml_output2 = self.ml_model2.predict(data_1)
         # ml_output = self.ml_model_15.predict(data_1)
-        if ml_output[0] == 1:
-            msg = f'Recommended for next 5 min in {symbols} was BUY'
-            print(msg)
-            response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
-            response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
-        elif ml_output[0] == 2:
-            msg = f'Recommended for next 5 min in {symbols} was SELL'
-            print(msg)
-            response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
-            response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='300')
+        if ml_output[0] == 1 and ml_output2[0] == 1:
+            if not OlympTrade.objects.filter(asset= symbols, created_at__gte=datetime.now()-timedelta(minutes=15)).latest('id'):
+                OlympTrade.objects.create(**{'asset': symbols, 'created_at': datetime.now()})
+                msg = f'Recommended for next 15 min in {symbols} was BUY'
+                print(msg)
+                response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
+                response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='900')
+        elif ml_output[0] == 2 and ml_output2[0] == 2:
+            if not OlympTrade.objects.filter(asset= symbols, created_at__gte=datetime.now()-timedelta(minutes=15)).latest('id'):
+                OlympTrade.objects.create(**{'asset': symbols, 'created_at': datetime.now()})
+                msg = f'Recommended for next 15 min in {symbols} was SELL'
+                print(msg)
+                response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
+                response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='900')
         else:
             print('neutral')
 
