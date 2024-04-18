@@ -19,7 +19,7 @@ app.conf.timezone = 'UTC'
 
 @app.task
 def start_trade():
-    response = requests.get("http://localhost:8001/signal/")
+    response = requests.get("http://localhost:8002/signal/")
     print(response.status_code)
     print(response.json())
     # sheet_update.apply_async(args=[response.json()])
@@ -58,7 +58,7 @@ def sheet_update(response=None):
 
 @app.task
 def update():
-    response = requests.get("http://localhost:8001/generate-data/")
+    response = requests.get("http://localhost:8002/generate-data/")
     print(response.status_code)
     print(response.json())
     
