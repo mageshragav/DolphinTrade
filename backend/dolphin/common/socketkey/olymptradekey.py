@@ -35,8 +35,10 @@ class OlympTradeConnection():
         # except:
         #     ws.close()
 
-    def generateUuid(self):
-        return ''.join([random.choice(string.ascii_uppercase+string.digits) for n in range(18)])
+    def generateUuid(self,size=18):
+        if size == 6:
+            return ''.join([random.choice(string.ascii_uppercase+string.ascii_lowercase) for n in range(size)])
+        return ''.join([random.choice(string.ascii_uppercase+string.digits) for n in range(size)])
     
     def get_bet_key(self,dir,pair,amount="1",duration="60"):
         data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":str(dir),"pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
@@ -102,3 +104,12 @@ class OlympTradeConnection():
             
         
         return f'{data}'
+    
+    def get_candle_data_key(self,pair='EURUSD'):
+        data = [
+            {"t":2,
+             "e":10,
+             "uuid":self.generateUuid(size=6),
+             "d":[{"pair":pair,"size":60,"to":int(time.time()),"solid":True}]}]
+        # return f'{data}'.replace('True','true')
+        return '[{"t":2,"e":10,"uuid":"'+self.generateUuid(size=6)+'","d":[{"pair":"EURUSD_OTC","size":60,"to":'+str(int(time.time()))+',"solid":true}]}]'
