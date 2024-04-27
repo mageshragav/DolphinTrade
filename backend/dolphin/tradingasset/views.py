@@ -1,4 +1,5 @@
 import pickle
+from common.task import callorput
 from tradingasset.models import *
 from common.socketconnect.Olymptradeconnect import OlympTradeClient
 from common.views import TradingViewApi
@@ -13,9 +14,10 @@ import pandas as pd
 from django.shortcuts import render
 import json
 from TradingDataGenerate import main
-from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg,sma_indicator
-from ta.momentum import rsi,stochrsi_d,stochrsi_k,stochrsi
+from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg,sma_indicator,ema_indicator
+from ta.momentum import rsi,stochrsi_d,stochrsi_k,stochrsi,williams_r
 import numpy as np
+import math
 # Create your views here.
 # value = list()
 class OlympTradeTrigger:
@@ -24,59 +26,21 @@ class OlympTradeTrigger:
         balance_key = 'demo' #real
         self.olymp_client = OlympTradeClient(group='demo')
         self.balance = self.olymp_client.balance
-        self.ml_model = pickle.load(open('backend/dolphin/rfclassifier_15.sav','rb'))
-        self.ml_model2 = pickle.load(open('backend/dolphin/xgbclassifier_15.sav','rb'))
-        # self.ml_model = pickle.load(open('backend/dolphin/combineclassifier.sav','rb'))
-        # self.ml_model_15 = pickle.load(open('backend/dolphin/xgbclassifier_15.sav','rb'))
         self.s = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
         print(f"Current {balance_key} Balance is : {self.balance}")
-        pass
-
-    def db_entry(self,summary,mov_avg,indicators, data, oscillator):
-        try:
-            recomend = 1 if data['personal'] == 'BUY' else 2 if data['personal'] == 'SELL' else 3
-            direction = 1 if data['direction'] == 'up' else 2
-            olymp_data = {"asset": data['asset'],"personal_recommend": data['personal'], "recommend": recomend,
-                        "recommend_buy": summary['BUY'], 'recommend_sell': summary['SELL'], 'recommend_neutral': summary['NEUTRAL'],
-                        "price": data['amount'], "timing": data['duration'], "direction": direction}
-            five_min = timezone.now()-timedelta(minutes=5)
-            if not OlympTrade.objects.filter(asset=data['asset'], created_at__range=[five_min,timezone.now()]).exists():
-                olymptrade = OlympTrade.objects.create(**olymp_data)
-                moving_avg_data = {"olymptrade": olymptrade, "recommend": recomend, "recommend_buy": mov_avg['BUY'],
-                                "recommend_sell": mov_avg['SELL'], "all_mvavg": json.dumps(mov_avg)}
-                moving_avg = MovingAvg.objects.create(**moving_avg_data)
-                indicators_data = {"olymptrade": olymptrade, "open": indicators['open'], "close": indicators['close'], "low": indicators['low'],
-                                "high": indicators['high'], "indictors": json.dumps(indicators)}
-                indicators_obj = Indicators.objects.create(**indicators_data)
-                oscilator_recommend = 1 if oscillator['RECOMMENDATION'] in ('BUY', 'STRONG_BUY') else 2 if oscillator['RECOMMENDATION'] in ('SELL','STRONG_SELL') else 3
-                oscillator_data = {"olymptrade": olymptrade, "recommended": oscilator_recommend, "buy": oscillator['BUY'],
-                                "sell": oscillator['SELL'], "neutral": oscillator['NEUTRAL'], "oscillators": json.dumps(oscillator['COMPUTE'])}
-                oscillator_obj = Osclillators.objects.create(**oscillator_data)
-            else:
-                print('trade will not accept for last five minutes')
-            return True
-        except Exception as e:
-            print(e.args)
-            return False
 
     @staticmethod
-    def calculate(pd: pd.DataFrame,predict=True):
+    def calculate_1(pd: pd.DataFrame,predict=True):
         pdrsi = rsi(pd['close'],14)
-        # rsi.dropna(axis=0,inplace=True)
         pdcci = cci(pd['high'],pd['low'],pd['close'],14)
-        # cci.dropna(axis=0,inplace=True)
         pdadx = adx(pd['high'],pd['low'],pd['close'])
         pdadx_pos = adx_pos(pd['high'],pd['low'],pd['low']) 
         pdadx_neg = adx_neg(pd['high'],pd['low'],pd['low'])
-        # adx.dropna(axis=0,inplace=True)
         pdmacd = macd(pd['close'])
-        # macd.dropna(axis=0,inplace=True)
         pdmacd_signal = macd_signal(pd['close'])
-        # macd_signal.dropna(axis=0,inplace=True)
         pdstochrsi_d = stochrsi_d(pd['close'])
         pdstochrsi_k = stochrsi_k(pd['close'])
         pdstochrsi = stochrsi(pd['close'])
-        # stochrsi.dropna(axis=0,inplace=True)
         pd2 = pd.iloc[:,1:7].copy(deep=True) # iloc[row,column]
         pd2['rsi'] = pdrsi
         pd2['cci'] = pdcci
@@ -88,81 +52,67 @@ class OlympTradeTrigger:
         pd2['stochrsi_d'] = pdstochrsi_d
         pd2['stochrsi_k'] = pdstochrsi_k
         pd2['stochrsi'] = pdstochrsi
-        # pd2['RSI'] = pdrsi.apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype(int)
-        # pd2['CCI'] = pdcci.apply(lambda x: 1 if x < -100 else 2 if x > 100 else 0).astype(int)
-        # conditions_3 = (pd2['stochrsi'] > 80) & (pd2['stochrsi_k'] < pd2['stochrsi_d'])
-        # conditions_4 = (pd2['stochrsi'] < 20) & (pd2['stochrsi_k'] > pd2['stochrsi_d'])
-        # pd2['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0)).astype(int)
-        pd2['ADX'] = np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] > pd2['adx_neg']), 1, np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype(int)
-        # pd2['MCAD'] = np.where((pd2['macd'] > pd2['macd_signal']), 1, np.where(pd2['macd'] < pd2['macd_signal'], 2, 0)).astype(int)
-        pd2['next_close'] = pd2['close'].shift(-1)
+        pd2['sma_av'] = sma_indicator(pd['close'],10)
+        pd2['ema_av'] = ema_indicator(pd['close'],10)
+        pd2['RSI'] = pdrsi.apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype('int32')
+        pd2['ADX'] = np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] > pd2['adx_neg']), 1, np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype('int32')
+        pd2['MCAD'] = np.where((pd2['macd'] > pd2['macd_signal']), 1, np.where(pd2['macd'] < pd2['macd_signal'], 2, 0)).astype('int32')
+        # pd2['next_close'] = pd2['close'].shift(-1)
         pd2.dropna(axis=0,inplace=True)
-        # pd2.drop(columns=['adx','adx_pos','adx_neg','macd','macd_signal','stochrsi','stochrsi_d','stochrsi_k'],axis=1,inplace=True)
-        # condition = (sum([pd2['RSI'],pd2['CCI'],pd2['STOCH.RSI'],pd2['ADX'],pd2['MCAD']]) > 2)
-        pd2['Prediction'] = np.where(pd2['ADX'] == 1 & (pd2['open'] < pd2['next_close']), 1,
-                                np.where(pd2['ADX'] == 2 & (pd2['open'] > pd2['next_close']), 2, 0)).astype(int)
-        pd2.drop(columns=['next_close','ADX'], inplace=True)
+        pd2['SMA'] = np.where((pd2['sma_av'] > pd2['close']), 1,
+                                np.where((pd2['sma_av'] < pd2['close']), 2, 0)).astype('int32')
+        pd2['EMA'] = np.where((pd2['ema_av'] > pd2['close']), 1,
+                                np.where((pd2['ema_av'] < pd2['close']), 2, 0)).astype('int32')
+        pd2['Prediction'] = np.where((pd2['open'] < pd2['close']), 1,
+                                np.where((pd2['open'] > pd2['close']), 2, 0)).astype('int32')
+        pd2.drop(columns=['sma_av', 'ema_av'], inplace=True)
         return pd2
     
     @staticmethod
+    def close_calculate(close):
+        print(close)
+        close = str(close).split('.')[-1]
+        abs_tol = '.'+'2'.rjust(len(close),'0')
+        print(f'abs values {abs_tol}')
+        abs_tol = float(abs_tol)
+        return abs_tol
+
+    @staticmethod
     def confirm_trend(pddata: pd.DataFrame):
-        cci_os = cci(pddata['high'],pddata['low'],pddata['close'],21)
-        sma_trend_high = sma_indicator(pddata['high'],21)
-        sma_trend_low = sma_indicator(pddata['low'],21)
-        print(cci_os.iloc[-1], pddata.iloc[-1]['open'], sma_trend_high.iloc[-1], sma_trend_low.iloc[-1])
-        if cci_os.iloc[-1] > 50 and sma_trend_high.iloc[-1] < pddata.iloc[-1]['open']:
-            print('buy')
-            return 'buy'
-        elif cci_os.iloc[-1] < -50 and sma_trend_low.iloc[-1] > pddata.iloc[-1]['open']:
-            print('sell')
-            return 'sell'
+        ema_20 = ema_indicator(pddata['close'],window=20)
+        ema_50 = ema_indicator(pddata['close'],window=50)
+        rsi_14 = rsi(pddata['close'],14)
+        abs_tol = OlympTradeTrigger.close_calculate(pddata['close'].iloc[-1])
+        print(f'ema lst value {ema_20.iloc[-1],ema_50.iloc[-1]}')
+        print(f'ema 2nd lst value {ema_20.iloc[-2],ema_50.iloc[-2]}')
+        close_confirm_1 = math.isclose(ema_20.iloc[-1],ema_50.iloc[-1],abs_tol=abs_tol)
+        close_confirm_2 = math.isclose(ema_20.iloc[-2],ema_50.iloc[-2],abs_tol=abs_tol)
+        rsi_14_1 = rsi_14.iloc[-1]
+        rsi_14_2 = rsi_14.iloc[-2]
+        if close_confirm_1 and (50 < rsi_14_1 < 70):
+            return 'BUY'
+        elif close_confirm_1 and (50 > rsi_14_1 > 30):
+            return 'SELL'
+        elif close_confirm_2 and (50 < rsi_14_2 < 70):
+            return 'BUY'
+        elif close_confirm_2 and (50 > rsi_14_2 > 30):
+            return 'SELL'
         else:
-            print('netrual')
-            return 'netrual'
+            return 'NEUTRAL'
+
+    def get_candles(self,pair='EURUSD',size=60):
+        data = self.olymp_client.get_candle(size=size,pair=pair) 
+        candle_data = data[0].get('candles')
+        pd_data = pd.DataFrame(candle_data)
+        pd_data['t'] = pd.to_datetime(pd_data['t'], unit='s')
+        pd_data.apply(lambda row: pd.Series(row),axis=1)
+        return pd_data
+        
 
     def start_trading(self, symbols='EURUSD'):
         import random
-        symbols = random.choice(ALL_SYMBOLS)
-        print(symbols)
-        response_data = self.s.get_hist(symbol=symbols,exchange='FX',interval=main.Interval.in_15_minute,n_bars=300,extended_session=False)
-        result_pd = OlympTradeTrigger.calculate(response_data)
-        # adx_condition = ((result_pd['adx'] > 25.00) & (result_pd['adx'] < 30.00))
-        # result_pd['RSI_1'] = np.where(result_pd['rsi'] < 30, 1, np.where(result_pd['rsi'] > 70, 2, 0))
-        # result_pd['ADX_1'] = np.where((result_pd['adx'] > 25.00) & (result_pd['adx_pos'] < result_pd['adx_neg']), 1, np.where((result_pd['adx'] > 25.00) & (result_pd['adx_pos'] > result_pd['adx_neg']), 2, 0))
-        # conditions_3 = (result_pd['stochrsi'] > 0.75) & (result_pd['stochrsi_k'] < result_pd['stochrsi_d'])
-        # conditions_4 = (result_pd['stochrsi'] < 0.25) & (result_pd['stochrsi_k'] > result_pd['stochrsi_d'])
-        # result_pd['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0))
-        # result_pd['ADX_1'] = np.where(adx_condition & (result_pd['adx_pos'] < result_pd['adx_neg']), 1, np.where(adx_condition & (result_pd['adx_pos'] > result_pd['adx_neg']), 2, 0))
-        # conditions_3 = (result_pd['stochrsi'] > 0.75) & (result_pd['stochrsi_k'] < result_pd['stochrsi_d'])
-        # conditions_4 = (result_pd['stochrsi'] < 0.25) & (result_pd['stochrsi_k'] > result_pd['stochrsi_d'])
-        # result_pd['STOCH.RSI'] = np.where(conditions_3, 2, np.where(conditions_4, 1, 0))
-        # # result_pd['RSI_1'] = result_pd['RSI_1'] = np.where(result_pd['rsi'] < 30, 1, np.where(result_pd['rsi'] > 70, 2, 0))
-        # result_pd.dropna(inplace=True)
-        # result_pd.reset_index()
-        print(result_pd.iloc[-1])
-        data_1 = result_pd.iloc[-1,5:-1].to_dict()
-        data_1 = pd.DataFrame({key: [value] for key, value in data_1.items()})
-        print(data_1)
-        ml_output = self.ml_model.predict(data_1)
-        ml_output2 = self.ml_model2.predict(data_1)
-        # ml_output = self.ml_model_15.predict(data_1)
-        if ml_output[0] == 1 and ml_output2[0] == 1:
-            if not OlympTrade.objects.filter(asset= symbols, created_at__gte=datetime.now()-timedelta(minutes=15)).latest('id'):
-                OlympTrade.objects.create(**{'asset': symbols, 'created_at': datetime.now()})
-                msg = f'Recommended for next 15 min in {symbols} was BUY'
-                print(msg)
-                response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
-                response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='900')
-        elif ml_output[0] == 2 and ml_output2[0] == 2:
-            if not OlympTrade.objects.filter(asset= symbols, created_at__gte=datetime.now()-timedelta(minutes=15)).latest('id'):
-                OlympTrade.objects.create(**{'asset': symbols, 'created_at': datetime.now()})
-                msg = f'Recommended for next 15 min in {symbols} was SELL'
-                print(msg)
-                response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
-                response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='900')
-        else:
-            print('neutral')
-
+        for symbols in TRADE_SYMBOLS:
+            callorput.apply_async(args=[symbols])
 
     def single_trigger(self,symbols='EURUSD'):
         try:
@@ -177,35 +127,6 @@ class OlympTradeTrigger:
             indicators = self.trading_signal.get_indicators(signal=signal)
             print(oscillator)
             return oscillator,indicators
-            # recommend = self.trading_signal.personal_recommendation(data=summary,oscillator=oscillator, indicator=indicators,mv=mov_avg)
-            # msg = self.message_generator(signal_value=summary,asset=symbols,indicators=indicators,moving_avg=mov_avg)
-            # # response = send_telegram_message.apply_async(args=('', msg))
-            # if recommend['BUY']:
-            #     response_data = self.olymp_client.get_bet('up',symbols,amount='1',duration='300')
-            #     response = send_telegram_message.apply_async(args=(IMAGE_GREEN, msg))
-            #     data = {'personal': 'BUY','direction': 'up','asset': symbols, 'amount': '1', 'duration': '300'}
-            #     self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
-            #     # print(response_data)
-            #     print(f"================TRADING SUCCESS WITH BUY {symbols}=======================")
-            #     print(symbols,summary,oscillator,indicators,mov_avg)
-            #     print('================TRADING SUCCESS WITH BUY END=======================')
-            # elif recommend['SELL']:
-            #     response_data = self.olymp_client.get_bet('down',symbols,amount='1',duration='300')
-            #     response = send_telegram_message.apply_async(args=(IMAGE_RED, msg))
-            #     data = {'personal': 'SELL','direction': 'down','asset': symbols, 'amount': '1', 'duration': '300'}
-            #     self.db_entry(summary=summary,mov_avg=mov_avg,indicators=indicators,data=data, oscillator=oscillator)
-            #     print(f"================TRADING SUCCESS WITH SELL {symbols}=======================")
-            #     print(symbols,summary,oscillator,indicators,mov_avg)
-            #     print('================TRADING SUCCESS WITH SELL END=======================')
-            #     # print(response_data)
-            # summary['RSI'] = indicators['RSI']
-            # summary['MACD'] = oscillator['COMPUTE']['MACD']
-            # oscillator.update(indicators)
-            # mv_ag = mov_avg['COMPUTE']
-            # oscillator.update(mv_ag)
-            # summary['TOTAL'] = json.dumps(oscillator)
-                
-            # return summary, recommend
         except Exception as e:
             print(e.args)
 
@@ -214,55 +135,11 @@ class OlympTradeTrigger:
             value = list()
             current_time = timezone.now().astimezone(pytz.timezone('America/New_York'))
             for timeing, assets in TIME_SYMBOL_MAPPING.items():
-                # if timeing[0] <= current_time.replace(tzinfo=None) <= timeing[1]:
-                #     for asset in assets:
-                #         five_min = timezone.now() - timedelta(minutes=5)
-                #         if not OlympTrade.objects.filter(asset=asset, created_at__range=[five_min,timezone.now()]).exists():
-                recommend = self.single_trigger(symbols='EURUSD')
+                recommend = self.single_trigger(symbols='EURUSD',countdown=3)
                 return recommend
-                    #         if recommend['SELL'] or recommend['BUY']:
-                    #             summary['asset'] = asset
-                    #             summary['personal'] = recommend
-                    #             summary['date_time'] = timezone.now().strftime("%d/%m/%Y %H:%M:%S")
-                    #             value.append(summary)
-                    # self.olymp_client.disconnect()
             return value
-            # else:
-            #     for asset in EUR_SYMBOLS:
-            #         summary, recommend = self.single_trigger(symbols=asset)
-            #         summary['asset'] = asset
-            #         summary['personal'] = recommend
-            #         value.append(summary)
         except Exception as e:
             print(e.args)
-
-    def data_creation(self):
-        df = pd.DataFrame()
-        for symbol in USD_SYMBOLS:
-            mov = dict()
-            five_min = Interval.INTERVAL_5_MINUTES
-            self.trading_signal = TradingViewApi(symbols=symbol,screener=SCREENER,exchange=EXCHANGE,interval=five_min)
-            signal = self.trading_signal.signal
-            oscillator = self.trading_signal.get_oscillators(signal)
-            print(oscillator)
-            mov_avg = self.trading_signal.get_moving_avg(signal=signal)
-            indicators = self.trading_signal.get_indicators(signal=signal)
-            oscillator['COMPUTE']['SYMBOL'] = symbol
-            oscillator['COMPUTE']['OPEN'] = indicators['open']
-            oscillator['COMPUTE']['CLOSE'] = indicators['close']
-            oscillator['COMPUTE']['DATA/TIME'] = datetime.strftime(datetime.now(),'%Y-%m-%d %H:%M:%S')
-            print(mov_avg)
-            mov = {"Ichimoku": mov_avg['COMPUTE']['Ichimoku'], "VWMA": mov_avg['COMPUTE']['VWMA'], "HullMA": mov_avg['COMPUTE']['HullMA']}
-            oscillator['COMPUTE'].update(mov)
-            self.olymp_client.get_bet('up',symbol,amount='1',duration='300')
-            if len(df) == 0:
-                df = pd.DataFrame([oscillator['COMPUTE']])
-            else:
-                df.loc[len(df)] = oscillator['COMPUTE']
-        self.olymp_client.disconnect()
-        put_excel(df)
-        return 'success'
-
 
 
     def message_generator(self,signal_value, asset,indicators,moving_avg):
@@ -278,77 +155,6 @@ class OlympTradeTrigger:
         moving_ag = moving_avg['RECOMMENDATION']
         recommendation = f"Recommendation are buy {buy_value}, sell {sell_value}, neutral_value {neutral_value} and moving average was {moving_ag}"
         msg = f"In the upcoming {5} minutes from {current_time} on {current_date},opening price {open} and PUT {recommend} for the {asset_val} asset. {recommendation}"
-        # html_css_content = """
-        #     <html>
-        #         <head>
-        #             <style>
-        #                 body {
-        #                 font-family: Arial, sans-serif;
-        #                 background-color: #f2f2f2;
-        #                 }
-
-        #                 .signal-card {
-        #                 background-color: #fff;
-        #                 border-radius: 10px;
-        #                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        #                 width: 300px;
-        #                 margin: 20px auto;
-        #                 padding: 20px;
-        #                 }
-
-        #                 h1 {
-        #                 color: #333;
-        #                 font-size: 24px;
-        #                 margin: 0;
-        #                 }
-
-        #                 .signal-info {
-        #                 margin-top: 10px;
-        #                 }
-
-        #                 .info-label {
-        #                 font-weight: bold;
-        #                 margin-right: 5px;
-        #                 }
-
-        #                 .buy {
-        #                 color: #4CAF50;
-        #                 }
-
-        #                 .sell {
-        #                 color: #F44336;
-        #                 }
-
-        #                 .mov-avg {
-        #                 margin-top: 10px;
-        #                 }
-
-        #                 .strong-buy {
-        #                 background-color: #4CAF50;
-        #                 color: #fff;
-        #                 padding: 5px 10px;
-        #                 border-radius: 5px;
-        #                 }     
-        #             </style>
-        #         </head>"""+\
-        #         f"""<body>
-        #             <div class="signal-card">
-        #                 <h1>SIGNAL: {recommend}</h1>
-        #                 <div class="signal-info">
-        #                 <span class="info-label">SYMBOL:</span> {asset_val}<br>
-        #                 <span class="info-label">TIME:</span> {5} MINS<br>
-        #                 <span class="info-label">OPEN:</span> {open}<br>
-        #                 <span class="info-label">OSCILLATOR:</span>
-        #                 <span class="buy">BUY: {buy_value}</span>
-        #                 <span class="sell">SELL: {sell_value}</span><br>
-        #                 </div>
-        #                 <div class="mov-avg">
-        #                 <span class="info-label">MOV AVG:</span> <span class="strong-buy">{moving_ag}</span>
-        #                 </div>
-        #             </div>
-        #         </body>"""+\
-        #     """</html>
-        # """
         html_css_content =f"SIGNAL: {recommend}\n"+\
                 f"SYMBOL: {asset_val}\n"+\
                 f"TIME: 5 MINS\n"+\

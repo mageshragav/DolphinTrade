@@ -51,3 +51,8 @@ class OlympTradeClient:
         history_key = self.key.get_history_key()
         response = self.send_and_receive(history_key)
         return response if response else False
+    
+    def get_candle(self,size=60,pair='EURUSD'):
+        history_key = self.key.get_candle_data_key(pair='EURUSD')
+        response = self.send_and_receive(history_key)
+        return response if response else False
