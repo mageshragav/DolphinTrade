@@ -4,7 +4,9 @@ from websocket._exceptions import WebSocketConnectionClosedException
 from common.socketkey.olymptradekey import OlympTradeConnection
 from common.constants import HEADERS, OLYMP_WS
 import time
+import logging
 
+logger = logging.getLogger('dolphin')
 class OlympTradeClient:
     def __init__(self, group='demo'):
         self.group = group
@@ -32,7 +34,7 @@ class OlympTradeClient:
 
     def get_bet(self, direction, pair, amount="1", duration="60"):
         bet_key = self.key.get_bet_key(dir=direction, pair=pair, amount=amount, duration=duration)
-        print(bet_key)
+        logger.info(bet_key)
         bet_key = json.dumps(bet_key)
         response = self.send_and_receive(bet_key)
         return response if response else False
@@ -53,6 +55,6 @@ class OlympTradeClient:
         return response if response else False
     
     def get_candle(self,size=60,pair='EURUSD'):
-        history_key = self.key.get_candle_data_key(pair='EURUSD')
+        history_key = self.key.get_candle_data_key(pair=pair,size=size)
         response = self.send_and_receive(history_key)
         return response if response else False

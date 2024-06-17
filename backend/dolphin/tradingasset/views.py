@@ -1,23 +1,22 @@
-import pickle
 from common.task import callorput
 from tradingasset.models import *
 from common.socketconnect.Olymptradeconnect import OlympTradeClient
 from common.views import TradingViewApi
 from common.constants import *
 from datetime import *
-from common.telegram_bot import send_telegram_message
 from tradingview_ta.main import Interval
 from django.utils import timezone
 from django.http import HttpResponse
-import pandas as pd
+import pandas as pda
 # from trading.celery import app
 from django.shortcuts import render
 import json
-from TradingDataGenerate import main
-from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg,sma_indicator,ema_indicator
+from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg,sma_indicator,ema_indicator, MACD
 from ta.momentum import rsi,stochrsi_d,stochrsi_k,stochrsi,williams_r
 import numpy as np
-import math
+import logging
+
+logger = logging.getLogger('dolphin')
 # Create your views here.
 # value = list()
 class OlympTradeTrigger:
@@ -25,94 +24,216 @@ class OlympTradeTrigger:
         # symbols,screener,exchange,interval
         balance_key = 'demo' #real
         self.olymp_client = OlympTradeClient(group='demo')
-        self.balance = self.olymp_client.balance
-        self.s = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
-        print(f"Current {balance_key} Balance is : {self.balance}")
+        # self.balance = self.olymp_client.balance
+        # # self.s = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
+        # logger.info(f"Current {balance_key} Balance is : {self.balance}")
 
+    # @staticmethod
+    # def calculate_1(pd: pd.DataFrame,predict=True):
+    #     pdrsi = rsi(pd['close'],14)
+    #     pdcci = cci(pd['high'],pd['low'],pd['close'],14)
+    #     pdadx = adx(pd['high'],pd['low'],pd['close'])
+    #     pdadx_pos = adx_pos(pd['high'],pd['low'],pd['low']) 
+    #     pdadx_neg = adx_neg(pd['high'],pd['low'],pd['low'])
+    #     pdmacd = macd(pd['close'])
+    #     pdmacd_signal = macd_signal(pd['close'])
+    #     pdstochrsi_d = stochrsi_d(pd['close'])
+    #     pdstochrsi_k = stochrsi_k(pd['close'])
+    #     pdstochrsi = stochrsi(pd['close'])
+    #     pd2 = pd.iloc[:,1:7].copy(deep=True) # iloc[row,column]
+    #     pd2['rsi'] = pdrsi
+    #     pd2['cci'] = pdcci
+    #     pd2['adx'] = pdadx
+    #     pd2['adx_pos'] = pdadx_pos
+    #     pd2['adx_neg'] = pdadx_neg
+    #     pd2['macd'] = pdmacd
+    #     pd2['macd_signal'] = pdmacd_signal
+    #     pd2['stochrsi_d'] = pdstochrsi_d
+    #     pd2['stochrsi_k'] = pdstochrsi_k
+    #     pd2['stochrsi'] = pdstochrsi
+    #     pd2['sma_av3'] = sma_indicator(pd['close'],3)
+    #     pd2['sma_av6'] = sma_indicator(pd['close'],6)
+    #     pd2['RSI'] = pdrsi.apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype('int32')
+    #     pd2['ADX'] = np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] > pd2['adx_neg']), 1, np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype('int32')
+    #     pd2['MCAD'] = np.where((pd2['macd'] > pd2['macd_signal']), 1, np.where(pd2['macd'] < pd2['macd_signal'], 2, 0)).astype('int32')
+    #     # pd2['next_close'] = pd2['close'].shift(-1)
+    #     pd2.dropna(axis=0,inplace=True)
+    #     pd2['SMA3'] = np.where((pd2['sma_av3'] > pd2['close']), 1,
+    #                             np.where((pd2['sma_av3'] < pd2['close']), 2, 0)).astype('int32')
+    #     pd2['SMA6'] = np.where((pd2['sma_av6'] > pd2['close']), 1,
+    #                             np.where((pd2['sma_av6'] < pd2['close']), 2, 0)).astype('int32')
+    #     pd2['Prediction'] = np.where((pd2['open'] < pd2['close']), 1,
+    #                             np.where((pd2['open'] > pd2['close']), 2, 0)).astype('int32')
+    #     pd2.drop(columns=['sma_av3', 'sma_av6'], inplace=True)
+    #     return pd2
+    
     @staticmethod
-    def calculate_1(pd: pd.DataFrame,predict=True):
-        pdrsi = rsi(pd['close'],14)
-        pdcci = cci(pd['high'],pd['low'],pd['close'],14)
-        pdadx = adx(pd['high'],pd['low'],pd['close'])
-        pdadx_pos = adx_pos(pd['high'],pd['low'],pd['low']) 
-        pdadx_neg = adx_neg(pd['high'],pd['low'],pd['low'])
-        pdmacd = macd(pd['close'])
-        pdmacd_signal = macd_signal(pd['close'])
-        pdstochrsi_d = stochrsi_d(pd['close'])
-        pdstochrsi_k = stochrsi_k(pd['close'])
-        pdstochrsi = stochrsi(pd['close'])
-        pd2 = pd.iloc[:,1:7].copy(deep=True) # iloc[row,column]
-        pd2['rsi'] = pdrsi
-        pd2['cci'] = pdcci
-        pd2['adx'] = pdadx
-        pd2['adx_pos'] = pdadx_pos
-        pd2['adx_neg'] = pdadx_neg
-        pd2['macd'] = pdmacd
-        pd2['macd_signal'] = pdmacd_signal
-        pd2['stochrsi_d'] = pdstochrsi_d
-        pd2['stochrsi_k'] = pdstochrsi_k
-        pd2['stochrsi'] = pdstochrsi
-        pd2['sma_av'] = sma_indicator(pd['close'],10)
-        pd2['ema_av'] = ema_indicator(pd['close'],10)
-        pd2['RSI'] = pdrsi.apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype('int32')
-        pd2['ADX'] = np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] > pd2['adx_neg']), 1, np.where((pd2['adx'] > 25.00) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype('int32')
-        pd2['MCAD'] = np.where((pd2['macd'] > pd2['macd_signal']), 1, np.where(pd2['macd'] < pd2['macd_signal'], 2, 0)).astype('int32')
+    def calculate_1(pd: pda.DataFrame,predict=True):
+        # Add indicators to new DataFrame
+        pd2 = pd.iloc[:, :7].copy(deep=True)
+        pd2['rsi'] = rsi(pd['close'], 11)
+        pd2['cci'] = cci(pd['high'], pd['low'], pd['close'], 14)
+        pd2['macd'] = macd(pd['close'],7,5)
+        pd2['macd_signal'] = macd_signal(pd['close'],7,5,4)
+        pd2['sma_av3'] = sma_indicator(pd['close'], 3)
+        pd2['sma_av6'] = sma_indicator(pd['close'], 6)
+        intersections = pd2[(pd2['sma_av3'] < pd2['sma_av6']) & (pd2['sma_av3'].shift(1) > pd2['sma_av6'].shift(1)) | 
+                    (pd2['sma_av3'] > pd2['sma_av6']) & (pd2['sma_av3'].shift(1) < pd2['sma_av6'].shift(1))]
+        
+        Macd_intersections = pd2[(pd2['macd'] < pd2['macd_signal']) & (pd2['macd'].shift(1) > pd2['macd_signal'].shift(1)) | 
+                    (pd2['macd'] > pd2['macd_signal']) & (pd2['macd'].shift(1) < pd2['macd_signal'].shift(1))]
+        
+        pd2.loc[:,'Intersection'] = False
+        pd2.loc[:,'Macd_intersection'] = False
+        pd2.loc[intersections.index, 'Intersection'] = True
+        pd2.loc[Macd_intersections.index, 'Macd_intersection'] = True
+        pd2.loc[:,'Signal']= 0
+        pd2.loc[:,'MACDSignal']= 0
+        pd2.loc[(pd2['Intersection']) & (pd2['sma_av3'] > pd2['sma_av6']), 'Signal'] = 1
+        pd2.loc[(pd2['Intersection']) & (pd2['sma_av3'] < pd2['sma_av6']), 'Signal'] = 2
+        pd2.loc[(pd2['Macd_intersection']) & (pd2['macd'] > pd2['macd_signal']), 'MACDSignal'] = 1
+        pd2.loc[(pd2['Macd_intersection']) & (pd2['macd'] < pd2['macd_signal']), 'MACDSignal'] = 2
+        # Generate signals
+        # pd2['RSI'] = pd2['rsi'].apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype('int32')
+        # pd2['ADX'] = np.where((pd2['adx'] > 25) & (pd2['adx_pos'] > pd2['adx_neg']), 1,
+        #                       np.where((pd2['adx'] > 25) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype('int32')
+
+        # Prepare for prediction
         # pd2['next_close'] = pd2['close'].shift(-1)
-        pd2.dropna(axis=0,inplace=True)
-        pd2['SMA'] = np.where((pd2['sma_av'] > pd2['close']), 1,
-                                np.where((pd2['sma_av'] < pd2['close']), 2, 0)).astype('int32')
-        pd2['EMA'] = np.where((pd2['ema_av'] > pd2['close']), 1,
-                                np.where((pd2['ema_av'] < pd2['close']), 2, 0)).astype('int32')
-        pd2['Prediction'] = np.where((pd2['open'] < pd2['close']), 1,
-                                np.where((pd2['open'] > pd2['close']), 2, 0)).astype('int32')
-        pd2.drop(columns=['sma_av', 'ema_av'], inplace=True)
+        
+        # pd2['Prediction'] = np.where(pd2['open'] < pd2['close'], 1,
+        #                             np.where(pd2['open'] > pd2['close'], 2, 0)).astype('int32')
+        # pd21 = pd2[(pd2['Signal'] == 1) & (pd2['MACDSignal'] == 1) & (pd2['Prediction'] == 1)]
+        # pd22 = pd2[(pd2['Signal'] == 2) & (pd2['MACDSignal'] == 2) & (pd2['Prediction'] == 2)]
+        # pd23 = pd2[(pd2['Signal'] == 0) & (pd2['MACDSignal'] == 0) & (pd2['Prediction'] == 0)]
+        # pd2 = pda.concat([pd21,pd22,pd23])
+        logger.info(pd2.iloc[-1])
+        pd2.dropna(inplace=True)
+        # Clean up
+        pd2.drop(columns=['sma_av3', 'sma_av6','macd','macd_signal','Intersection', 'Macd_intersection'], inplace=True)
+        logger.info(pd2.iloc[-1])
         return pd2
     
     @staticmethod
     def close_calculate(close):
-        print(close)
+        logger.info(close)
         close = str(close).split('.')[-1]
-        abs_tol = '.'+'2'.rjust(len(close),'0')
-        print(f'abs values {abs_tol}')
+        abs_tol = '.'+'4'.rjust(len(close),'0')
+        logger.info(f'abs values {abs_tol}')
         abs_tol = float(abs_tol)
         return abs_tol
 
     @staticmethod
-    def confirm_trend(pddata: pd.DataFrame):
-        ema_20 = ema_indicator(pddata['close'],window=20)
-        ema_50 = ema_indicator(pddata['close'],window=50)
-        rsi_14 = rsi(pddata['close'],14)
-        abs_tol = OlympTradeTrigger.close_calculate(pddata['close'].iloc[-1])
-        print(f'ema lst value {ema_20.iloc[-1],ema_50.iloc[-1]}')
-        print(f'ema 2nd lst value {ema_20.iloc[-2],ema_50.iloc[-2]}')
-        close_confirm_1 = math.isclose(ema_20.iloc[-1],ema_50.iloc[-1],abs_tol=abs_tol)
-        close_confirm_2 = math.isclose(ema_20.iloc[-2],ema_50.iloc[-2],abs_tol=abs_tol)
-        rsi_14_1 = rsi_14.iloc[-1]
-        rsi_14_2 = rsi_14.iloc[-2]
-        if close_confirm_1 and (50 < rsi_14_1 < 70):
+    def fractals_pandas(df, period=5):
+        df = pda.DataFrame(df, columns=['high', 'low'])
+        df['up'] = False
+        df['down'] = False
+
+        half_period = period // 2
+
+        # Define conditions for a fractal up
+        conditions_up = True
+        for i in range(1, half_period + 1):
+            conditions_up &= (df['high'] > df['high'].shift(i)) & (df['high'] > df['high'].shift(-i))
+            # conditions_up &= (df['high'] > df['high'].shift(-i))
+
+        # Define conditions for a fractal down
+        conditions_down = True
+        for i in range(1, half_period + 1):
+            conditions_down &= (df['low'] < df['low'].shift(i)) & (df['low'] < df['low'].shift(-i))
+            # conditions_down &= (df['low'] < df['low'].shift(-i))
+
+        # Apply conditions to the dataframe
+        df.loc[conditions_up, 'up'] = True
+        df.loc[conditions_down, 'down'] = True
+
+        result = df[['up', 'down']].values.tolist()
+        return result
+    
+    @staticmethod
+    def confirm_trend(df: pda.DataFrame, symbol='EURUSD',duration='5m') -> str:
+        from tradingview_ta import TA_Handler, Interval, Exchange, get_multiple_analysis
+        df = df.copy()
+        # df.loc[:, 'MA1'] = sma_indicator(df['close'],window=3)
+        # df.loc[:, 'MA2'] = sma_indicator(df['close'],window=6)
+        # df['MACD'] = macd(df['close'],7,5)
+        # df['MACD_SIGNAL'] = macd_signal(df['close'],7,5,4)
+        fractal = OlympTradeTrigger.fractals_pandas(df,5)
+        # intersections = df[(df['MA1'] < df['MA2']) & (df['MA1'].shift(1) > df['MA2'].shift(1)) | 
+        #            (df['MA1'] > df['MA2']) & (df['MA1'].shift(1) < df['MA2'].shift(1))]
+        # df.loc[:,'Intersection'] = False
+        # df.loc[intersections.index, 'Intersection'] = True
+        # df.loc[:,'Signal']= 'Hold'
+        # df.loc[(df['Intersection']) & (df['MA1'] > df['MA2']), 'Signal'] = 'Buy'
+        # df.loc[(df['Intersection']) & (df['MA1'] < df['MA2']), 'Signal'] = 'Sell'
+        # Macd_intersections = df[(df['MACD'] < df['MACD_SIGNAL']) & (df['MACD'].shift(1) > df['MACD_SIGNAL'].shift(1)) | 
+        #            (df['MACD'] > df['MACD_SIGNAL']) & (df['MACD'].shift(1) < df['MACD_SIGNAL'].shift(1))]
+        # df.loc[:,'Macd_intersection'] = False
+        # df.loc[Macd_intersections.index, 'Macd_intersection'] = True
+        # df.loc[:,'MACDSignal']= 'Hold'
+        # df.loc[(df['Macd_intersection']) & (df['MACD'] > df['MACD_SIGNAL']), 'MACDSignal'] = 'Buy'
+        # df.loc[(df['Macd_intersection']) & (df['MACD'] < df['MACD_SIGNAL']), 'MACDSignal'] = 'Sell'
+        # logger.info(f"=========={symbol} {df.iloc[-5:,-5:]}=================")
+        ma_buy = False  
+        ma_sell = False
+        logger.info(f'factral last five {fractal[-5:]}')
+        up_contains_true = any(row[0] for row in fractal[-5:])
+        down_contains_true = any(row[1] for row in fractal[-5:])
+        if down_contains_true:
+            ma_buy = True
+        elif up_contains_true:
+            ma_sell = True
+        # logger.info(f'=========={symbol} Fractal values up {up_contains_true} and down {down_contains_true} ==============')
+        # logger.info(f'=========={symbol} last 3 {df.iloc[-3:]} ==============')
+        if 1 == df['Signal'].tolist()[-2] and 1 in df['MACDSignal'].tolist()[-3:]:
+            if down_contains_true:
+                ma_buy = True
+            # ma_buy = True
+            # if down_contains_true and not up_contains_true:
+                # if 75 > rsi_ind.iloc[-1] > 40:
+                # ma_buy = True
+        logger.info(f'lst 2 {symbol} data in candles {df.iloc[-2:]}')
+        if 2 == df['Signal'].tolist()[-2] and 2 in df['MACDSignal'].tolist()[-3:]:
+            if up_contains_true:
+                ma_sell = True
+            # ma_sell = True
+            # if up_contains_true and not down_contains_true:
+                # if 25 < rsi_ind.iloc[-1] < 60:
+                # ma_sell = True
+        # if 'Sell' in (df.iloc[-2,-1],df.iloc[-1,-1]) and df.iloc[-1,-1] != 'Buy':
+        #     if up_contains_true:
+        #         ma_sell = True
+        # ma_buy = 'Buy' in (df.iloc[-1,-1],df.iloc[-2,-1]) and df.iloc[-2,-1] != 'Sell' and rsi_ind.iloc[-1]
+        # ma_sell = 'Sell' in (df.iloc[-1,-1],df.iloc[-2,-1]) and df.iloc[-2,-1] != 'Buy'
+        # data = TA_Handler(
+        #     symbol=symbol,
+        #     screener=SCREENER,
+        #     exchange=EXCHANGE,
+        #     interval=duration
+        # )
+        # recommend = data.get_analysis().summary.get('RECOMMENDATION')
+
+        if ma_buy:
             return 'BUY'
-        elif close_confirm_1 and (50 > rsi_14_1 > 30):
-            return 'SELL'
-        elif close_confirm_2 and (50 < rsi_14_2 < 70):
-            return 'BUY'
-        elif close_confirm_2 and (50 > rsi_14_2 > 30):
+        #recommend in ('STRONG_SELL','SELL') and 
+        elif ma_sell:
             return 'SELL'
         else:
-            return 'NEUTRAL'
+            return "NEUTRAL"
+        
 
-    def get_candles(self,pair='EURUSD',size=60):
+    def get_candles(self,pair,size=60):
         data = self.olymp_client.get_candle(size=size,pair=pair) 
         candle_data = data[0].get('candles')
-        pd_data = pd.DataFrame(candle_data)
-        pd_data['t'] = pd.to_datetime(pd_data['t'], unit='s')
-        pd_data.apply(lambda row: pd.Series(row),axis=1)
+        pd_data = pda.DataFrame(candle_data)
+        pd_data['t'] = pda.to_datetime(pd_data['t'], unit='s')
+        pd_data.apply(lambda row: pda.Series(row),axis=1)
         return pd_data
         
 
     def start_trading(self, symbols='EURUSD'):
         import random
-        for symbols in TRADE_SYMBOLS:
-            callorput.apply_async(args=[symbols])
+        callorput.apply_async(args=[symbols])
 
     def single_trigger(self,symbols='EURUSD'):
         try:
@@ -125,10 +246,10 @@ class OlympTradeTrigger:
             oscillator = self.trading_signal.get_oscillators(signal)
             mov_avg = self.trading_signal.get_moving_avg(signal=signal)
             indicators = self.trading_signal.get_indicators(signal=signal)
-            print(oscillator)
+            logger.info(oscillator)
             return oscillator,indicators
         except Exception as e:
-            print(e.args)
+            logger.info(e.args)
 
     def multi_trigger(self):
         try:
@@ -139,7 +260,7 @@ class OlympTradeTrigger:
                 return recommend
             return value
         except Exception as e:
-            print(e.args)
+            logger.info(e.args)
 
 
     def message_generator(self,signal_value, asset,indicators,moving_avg):
@@ -169,15 +290,15 @@ class OlympTradeTrigger:
 def table_request(request):
     trigger = OlympTradeTrigger()
     value = trigger.start_trading()
-    print(value)
+    logger.info(value)
     return HttpResponse(json.dumps(value))
 
 
 def data_generation(*args, **kwargs):
     olymp = OlympTradeTrigger()
-    print('started')
+    logger.info('started')
     data = sheet_upgrade()
-    print('ended')
+    logger.info('ended')
     return HttpResponse(json.dumps({'response': 'success','code': '0'}))
 
 def get_report(request):
@@ -193,27 +314,9 @@ def get_report(request):
     s = OlympTradeAPI()
     date_time = datetime.now()
     date_str = date_time.strftime("%d/%m/%Y, %H:%M:%S")
-    get_report = s.get_profit_lose_analysis(date_time)
-    summary = gc.open_by_url('https://docs.google.com/spreadsheets/d/10_56aiY13RWM0abBk8Zq4JxNYkdlpzsom0FkZolZh3Q/edit?usp=sharing').worksheet('summary')
-    summary_list = list()
-    summary_list.append([date_str,get_report['total_trade'],get_report['win'],get_report['loose'],get_report['draw'],get_report['win_ratio'],get_report['loose_ratio'],get_report['trade_open'],get_report['trade_close']])
-    summary.append_rows(summary_list)
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from io import BytesIO
-    import base64
-    y = np.array([get_report['win'], get_report['loose'], get_report['draw']])
-    mylabels = [f"WIN {get_report['win']}", f"LOOSE {get_report['loose']}", f"DRAW {get_report['draw']}"]
-    plt.pie(y, labels = mylabels)
-    # Save the plot to a memory buffer
-    buffer = BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    plt.close()
-    plot_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    response = HttpResponse(content_type='image/png')
-    response.write(base64.b64decode(plot_data))
-    return response
+    get_report, get_results = s.get_profit_lose_analysis(date_time)
+    #backend/dolphin/common/templates/rendering_table.html
+    return render(request, 'rendering_table.html', {'forex_data': get_report, 'get_results': get_results})
 
 def get_detail_report(request):
     import gspread
@@ -240,8 +343,8 @@ def get_detail_report(request):
     summary.clear()
     for get_report in get_reports:
         summary_list.append([get_report['pair'],get_report['dir'],get_report['status'],get_report['time_open'],get_report['time_close'], get_report['open'],get_report['close'],get_report['test_result']])
-    print(last_row_value)
-    print(type(last_row_value))
+    logger.info(last_row_value)
+    logger.info(type(last_row_value))
     summary.append_rows(summary_list)
     return HttpResponse("Success")
 
@@ -293,7 +396,7 @@ def sheet_upgrade():
                   oscillator['COMPUTE']['Mom'],oscillator['COMPUTE']['MACD'],oscillator['COMPUTE']['Stoch.RSI'],oscillator['COMPUTE']['W%R'],oscillator['COMPUTE']['BBP'],
                   oscillator['COMPUTE']['UO']]
         lrows = summary.get_all_values()
-        print(f'{i} import Starting..!!!!')
+        logger.info(f'{i} import Starting..!!!!')
         # Get the data from the last row
         last_row_data = summary.row_values(len(lrows))
         if last_row_data and last_row_data[1] != 'open':
@@ -304,5 +407,5 @@ def sheet_upgrade():
             else:
                 summary.update_cell(len(lrows),len(headers),0)
         summary.append_row(values)
-        print(f'{i} imported Successfully..!!!!')
+        logger.info(f'{i} imported Successfully..!!!!')
     return True

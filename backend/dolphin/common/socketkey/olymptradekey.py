@@ -5,7 +5,9 @@ import json
 # from websocket import create_connection
 import websocket
 from common.constants import HEADERS, OLYMP_WS
+import logging
 
+logger = logging.getLogger('dolphin')
 class OlympTradeConnection():
     def __init__(self,group='demo') -> None:
         self.host_v6 = OLYMP_WS
@@ -20,8 +22,8 @@ class OlympTradeConnection():
         ws = websocket.create_connection(self.host_v6,header=self.headers)
         key = str(self.get_wallet_key()).replace("'","\"").replace(" ","")
         ws.send(key)
-        print(key)
-        print('[{"t":2,"e":98,"uuid":"'+self.generateUuid()+'","d":[54]}]')
+        logger.info(key)
+        logger.info('[{"t":2,"e":98,"uuid":"'+self.generateUuid()+'","d":[54]}]')
         # [{"t":2,"e":31,"uuid":"nTF3CI","d":[{"account_id":2073645904,"group":"real"}]}]
         data = json.loads(ws.recv())
         ws.close()
@@ -29,7 +31,7 @@ class OlympTradeConnection():
         # ws = create_connection(self.host_v6,header=self.headers)
         # try:
         #     ws.send(self.get_wallet_key())
-        #     print("after sending connection")
+        #     logger.info("after sending connection")
         #     data = json.loads(ws.recv())
         #     return data[0]["d"]
         # except:
@@ -105,11 +107,11 @@ class OlympTradeConnection():
         
         return f'{data}'
     
-    def get_candle_data_key(self,pair='EURUSD'):
+    def get_candle_data_key(self,pair='EURUSD',size=60):
         data = [
             {"t":2,
              "e":10,
              "uuid":self.generateUuid(size=6),
              "d":[{"pair":pair,"size":60,"to":int(time.time()),"solid":True}]}]
         # return f'{data}'.replace('True','true')
-        return '[{"t":2,"e":10,"uuid":"'+self.generateUuid(size=6)+'","d":[{"pair":"EURUSD_OTC","size":60,"to":'+str(int(time.time()))+',"solid":true}]}]'
+        return '[{"t":2,"e":10,"uuid":"'+self.generateUuid(size=6)+'","d":[{"pair":"'+pair+'","size":'+str(size)+',"to":'+str(int(time.time()))+',"solid":true}]}]'
