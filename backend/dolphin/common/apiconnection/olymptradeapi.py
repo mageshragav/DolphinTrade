@@ -59,28 +59,27 @@ class OlympTradeAPI:
     
     def get_profit_lose_analysis(self,date_time=None):
         get_analysis = dict()
+        get_results = dict()
         get_result = self.getHistory(date_time)
         win_count = 0
         loose_count = 0
         draw_count = 0
         for i in get_result['deals']:
-            if i['status'] == 'win':
-                win_count += 1
-            elif i['status'] == 'loose':
-                loose_count += 1
-            else:
-                draw_count += 1
-        get_analysis['loose'] = loose_count
-        get_analysis['win'] = win_count
-        get_analysis['draw'] = draw_count
-        total_trade = loose_count+win_count+draw_count
-        get_analysis['total_trade'] = total_trade
-        get_analysis['win_ratio'] = (win_count/total_trade)*100
-        get_analysis['loose_ratio'] = (loose_count/total_trade)*100
-        get_analysis['draw_ratio'] = (draw_count/total_trade)*100
-        get_analysis['trade_open'] = f"{datetime.utcfromtimestamp(get_result['deals'][0]['time_open'])}"
-        get_analysis['trade_close'] = f"{datetime.utcfromtimestamp(get_result['deals'][-1]['time_open'])}"
-        return get_analysis
+            get_analysis[i['pair']] = list() if not get_analysis.get(i['pair']) else get_analysis[i['pair']]
+            win_count += 1 if i['status'] == 'win' else 0
+            loose_count += 1 if i['status'] == 'loose' else 0
+            draw_count += 1 if i['status'] == 'flat' else 0
+            dictionary = {'direction': i['dir'],
+                          'status': i['status'],
+                          'duration': i['duration'],
+                          'open': i['curs_open'],
+                          'close': i['curs_close']}
+            get_analysis[i['pair']].append(dictionary)
+        get_results['win_count'] = win_count
+        get_results['loose_count'] = loose_count
+        get_results['draw_count'] = draw_count
+        get_results['Profit'] = win_count - loose_count
+        return get_analysis, get_results
     
     def get_detail_analysis(self,date_time=None):
         get_analysis = list()

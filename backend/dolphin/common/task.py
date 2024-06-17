@@ -3,54 +3,61 @@ from common.constants import *
 from datetime import *
 from common.telegram_bot import send_telegram_message
 import pandas as pd
-from celery import app
-from TradingDataGenerate import main
-import os
+from dolphin.celery import app as ap
 from django.conf import settings
+import logging
 
+logger = logging.getLogger('dolphin')
 curr_dir = settings.BASE_DIR
 
-@app.shared_task()
+@ap.task
 def callorput(assest: str):
     from tradingasset.views import OlympTradeTrigger
     from tradingasset.models import OlympTrade
-    client = OlympTradeTrigger()
-    ml_model = pickle.load(open(f'{curr_dir}/common/ml_model/rfclassifier_5.sav','rb'))
-    ml_model2 = pickle.load(open(f'{curr_dir}/common/ml_model/xgbclassifier_5.sav','rb'))
-    tradingview_obj = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
+    timing = '300'
+    call_timing = '900'
+    ml_model = pickle.load(open(f'{curr_dir}/common/ml_model/rfclassifier_new_{int(timing)//60}.sav','rb'))
+    ml_model2 = pickle.load(open(f'{curr_dir}/common/ml_model/xgbclassifier_new_{int(timing)//60}.sav','rb'))
+    # ml_model = pickle.load(open(f'{curr_dir}/common/ml_model/rfclassifier_{int(timing)//60}_1.sav','rb'))
+    # ml_model2 = pickle.load(open(f'{curr_dir}/common/ml_model/xgbclassifier_{int(timing)//60}_1.sav','rb'))
+    # tradingview_obj = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
     def change_dtype(key,value):
         return int(value) if key in ['RSI','ADX','MCAD','SMA','EMA'] else value
-    # response_data = tradingview_obj.get_hist(symbol=assest,exchange='FX',interval=main.Interval.in_5_minute,n_bars=300,extended_session=False)
-    # one_min_data = tradingview_obj.get_hist(symbol=assest,exchange='FX',interval=main.Interval.in_1_minute,n_bars=300,extended_session=False)
-    one_min_data = client.get_candles(pair='EURUSD_OTC',size=300)
-    # response_data_15 = self.s.get_hist(symbol=symbols,exchange='FX',interval=main.Interval.in_15_minute,n_bars=300,extended_session=False)
-    result_pd = OlympTradeTrigger.calculate_1(one_min_data.iloc[::-1])
-    # print(result_pd.iloc[-1])
-    data_1 = result_pd.iloc[-1,4:-1].to_dict()
-    data_1 = pd.DataFrame({key: [change_dtype(key,value)] for key, value in data_1.items()})
-    print(data_1)
-    ml_output = ml_model.predict(data_1)
-    ml_output2 = ml_model2.predict(data_1)
-    print(assest)
-    trend = OlympTradeTrigger.confirm_trend(one_min_data.iloc[::-1])
-    print(f"assest {assest} and {trend} prediction data {ml_output[0]}, {ml_output2[0]}")
-    #summary['RECOMMENDATION'] in ('BUY', 'STRONG_BUY')
-    #summary['RECOMMENDATION'] in ('SELL', 'STRONG_SELL')
-    # ml_output = self.ml_model_15.predict(data_1)
-    if ml_output[0] == 1 and ml_output2[0] == 1 and trend == 'BUY':
-        if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(minutes=5)).exists():
-            OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})
-            msg = f'Recommended for next 15 min in {assest} was BUY'
-            print(msg)
-            response = send_telegram_message.apply_async(args=(f"{curr_dir}{IMAGE_GREEN}", msg))
-            response_data = client.olymp_client.get_bet('up',assest,amount='1',duration='300')
-    elif ml_output[0] == 2 and ml_output2[0] == 2 and trend == 'SELL':
-        if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(minutes=5)).exists():
-            OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})
-            msg = f'Recommended for next 15 min in {assest} was SELL'
-            print(msg)
-            response = send_telegram_message.apply_async(args=(f"{curr_dir}{IMAGE_RED}", msg))
-            response_data = client.olymp_client.get_bet('down',assest,amount='1',duration='300')
-    else:
-        print('neutral')
-    client.olymp_client.disconnect()
+    for assest in [assest,]: #,'EURJPY','EURGBP','GBPUSD','AUDCAD','AUDJPY'
+        client = OlympTradeTrigger() 
+        # response_data = tradingview_obj.get_hist(symbol=assest,exchange='FX',interval=main.Interval.in_5_minute,n_bars=300,extended_session=False)
+        # one_min_data = tradingview_obj.get_hist(symbol=assest,exchange='FX',interval=main.Interval.in_1_minute,n_bars=300,extended_session=False)
+        # five_min_data = client.get_candles(pair='EURUSD_OTC',size=300)
+        five_min_data = client.get_candles(pair=assest,size=int(timing))
+        # response_data_15 = self.s.get_hist(symbol=symbols,exchange='FX',interval=main.Interval.in_15_minute,n_bars=300,extended_session=False)
+        result_pd = OlympTradeTrigger.calculate_1(five_min_data.iloc[::-1])
+        # logger.info(result_pd.iloc[-1])
+        data_1 = result_pd.iloc[-1,5:].to_dict()
+        data_1 = pd.DataFrame({key: [change_dtype(key,value)] for key, value in data_1.items()})
+        logger.info(data_1)
+        ml_output = ml_model.predict(data_1)
+        ml_output2 = ml_model2.predict(data_1)
+        logger.info(assest)
+        trend = OlympTradeTrigger.confirm_trend(result_pd,symbol=assest,duration=f'{int(timing)//60}m')
+        logger.info(f"assest {assest} and trend {trend} prediction data {ml_output[0]}, {ml_output2[0]}")
+        #summary['RECOMMENDATION'] in ('BUY', 'STRONG_BUY')
+        #summary['RECOMMENDATION'] in ('SELL', 'STRONG_SELL')
+        # ml_output = self.ml_model_15.predict(data_1)
+        if ml_output[0] == 1 and ml_output2[0] == 1 and trend == 'BUY':
+            if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(seconds=int(timing))).exists():
+                OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})    
+                msg = f'Recommended for next {int(timing)//60} min in {assest} was BUY'
+                logger.info(msg)
+                response = send_telegram_message.apply_async(args=(f"{curr_dir}{IMAGE_GREEN}", msg))
+                response_data = client.olymp_client.get_bet('up',assest,amount='1',duration=f'{timing}')
+        elif ml_output[0] == 2 and ml_output2[0] == 2 and trend == 'SELL':
+            if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(seconds=int(timing))).exists():
+                OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})
+                msg = f'Recommended for next {int(timing)//60} min in {assest} was SELL'
+                logger.info(msg)
+                response = send_telegram_message.apply_async(args=(f"{curr_dir}{IMAGE_RED}", msg))
+                response_data = client.olymp_client.get_bet('down',assest,amount='1',duration=f'{timing}')
+        else:
+            logger.info('NEUTRAL')
+        client.olymp_client.disconnect()
+

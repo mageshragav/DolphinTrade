@@ -1,5 +1,7 @@
 from tradingview_ta import TA_Handler, Interval, Exchange, get_multiple_analysis
+import logging
 
+logger = logging.getLogger('dolphin')
 class TradingViewApi:
     def __init__(self,symbols,screener,exchange,interval) -> None:
         self.symbols = symbols
@@ -79,10 +81,10 @@ class TradingViewApi:
         EMA5 = 'SELL' if indicator['EMA5'] > indicator['close'] else 'BUY'
         SMA5 = 'SELL' if indicator['SMA5'] > indicator['close'] else 'BUY'
         EMAS = [SMA100,SMA200,EMA100,EMA200]
-        print(f"-------********{data['asset']}********------------")
-        print(f"MACD_LINE: {MACD_LINE},\nMACD_SIGNAL_LINE: {MACD_SIGNAL_LINE},\nSTOCHD: {STOCHD}\n,STOCHK: {STOCHK}\n,MCAD: {MCAD},\nMOM: {MOM},\nRSI: {RSI},\nWRR: {WRR},\nEMA5: {EMA5},\nSMA5: {SMA5},\nHullMA: {HullMA},\nIRSI: {IRSI},\nIRSI1: {IRSI1}")
-        print(f"oscillator: {oscillator['RECOMMENDATION']},\nmoving avg: {mv['RECOMMENDATION']}")
-        print(f"-------********{data['asset']}********------------")
+        logger.info(f"-------********{data['asset']}********------------")
+        logger.info(f"MACD_LINE: {MACD_LINE},\nMACD_SIGNAL_LINE: {MACD_SIGNAL_LINE},\nSTOCHD: {STOCHD}\n,STOCHK: {STOCHK}\n,MCAD: {MCAD},\nMOM: {MOM},\nRSI: {RSI},\nWRR: {WRR},\nEMA5: {EMA5},\nSMA5: {SMA5},\nHullMA: {HullMA},\nIRSI: {IRSI},\nIRSI1: {IRSI1}")
+        logger.info(f"oscillator: {oscillator['RECOMMENDATION']},\nmoving avg: {mv['RECOMMENDATION']}")
+        logger.info(f"-------********{data['asset']}********------------")
         if STOCHK <= 20 and STOCHD <= 20:
             if STOCHK > STOCHD and WRR <= -80:
                 if CCI < -100 and (MACD_LINE <= 0 and MACD_SIGNAL_LINE <= 0) and MCAD in 'BUY':
