@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+from logging.config import dictConfig
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,7 +41,8 @@ INSTALLED_APPS = [
     "common",
     "tradingasset",
     "users",
-    "TradingDataGeneration"
+    "TradingDataGeneration",
+    "TradingStradegy"
 ]
 
 MIDDLEWARE = [
@@ -135,3 +137,37 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 ALPHA_API_KEY = 'AI0V2OFUA8YIDWXF'
+
+BASE = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': "[%(asctime)s] %(levelname)s [%(filename)s:%(lineno)s] %(message)s",
+            'datefmt': "%Y/%b/%d %H:%M:%S"
+        },
+        'simple': {
+            'format': '%(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'trading': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': '/home/magesh/TrandingProjects/Project/loggers/trading_log.log',
+            'maxBytes': 1024 * 1024 * 200,  # 200 MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+        },
+    },
+    'loggers': {
+        'dolphin': {
+            'handlers': ['trading'],
+            'level': 'INFO',
+            'propagate': False
+        },
+    }
+}
+
+dictConfig(BASE)
