@@ -95,34 +95,54 @@ app.conf.beat_schedule = {
     #     'args': ['MHJNTR_X'],
     #     'schedule': crontab(minute='*')
     # },
-    'eurusd-run-every-minute': {
+    'eurusd': {
         'task': 'common.task.callorput',
         'args': ['EURUSD'],
         'schedule': crontab(minute='*')
     },
-    'eurgpb-run-every-minute': {
+    'eurgpb': {
         'task': 'common.task.callorput',
         'args': ['EURGBP'],
         'schedule': crontab(minute='*')
     },
-    'audusd-run-every-minute': {
+    'eurjpy': {
+        'task': 'common.task.callorput',
+        'args': ['EURJPY'],
+        'schedule': crontab(minute='*')
+    },
+    'euraud': {
+        'task': 'common.task.callorput',
+        'args': ['EURAUD'],
+        'schedule': crontab(minute='*')
+    },
+    'audusd': {
         'task': 'common.task.callorput',
         'args': ['AUDUSD'],
         'schedule': crontab(minute='*')
     },
-    'usdcad-run-every-minute': {
+    'usdcad': {
         'task': 'common.task.callorput',
         'args': ['USDCAD'],
         'schedule': crontab(minute='*')
     },
-    'gbpusd-run-every-minute': {
+    'usdjpy': {
+        'task': 'common.task.callorput',
+        'args': ['USDJPY'],
+        'schedule': crontab(minute='*')
+    },
+    'gbpusd': {
         'task': 'common.task.callorput',
         'args': ['GBPUSD'],
         'schedule': crontab(minute='*')
     },
-    'gbpcad-run-every-minute': {
+    'gbpcad': {
         'task': 'common.task.callorput',
         'args': ['GBPCAD'],
+        'schedule': crontab(minute='*')
+    },
+    'gbpaud': {
+        'task': 'common.task.callorput',
+        'args': ['GBPAUD'],
         'schedule': crontab(minute='*')
     },
     # 'run-every-5-minute': {

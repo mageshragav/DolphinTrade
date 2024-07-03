@@ -68,12 +68,14 @@ class OlympTradeTrigger:
     #     return pd2
     
     @staticmethod
-    def calculate_1(pd: pda.DataFrame,predict=True):
+    def calculate_1(pd: pda.DataFrame, predict=True):
         # Add indicators to new DataFrame
         pd2 = pd.iloc[:, :7].copy(deep=True)
-        pd2['rsi'] = rsi(pd['close'], 11)
-        pd2['cci'] = cci(pd['high'], pd['low'], pd['close'], 14)
         pd2['macd'] = macd(pd['close'],7,5)
+        pd2['rsi'] = rsi(pd['close'],7)
+        pd2['cci'] = cci(pd['high'],pd['low'],pd['close'],7)
+        pd2['adx'] = adx(pd['high'],pd['low'],pd['close'],2)
+        pd2['wr'] = williams_r(pd['high'],pd['low'],pd['close'],7)
         pd2['macd_signal'] = macd_signal(pd['close'],7,5,4)
         pd2['sma_av3'] = sma_indicator(pd['close'], 3)
         pd2['sma_av6'] = sma_indicator(pd['close'], 6)
@@ -93,25 +95,12 @@ class OlympTradeTrigger:
         pd2.loc[(pd2['Intersection']) & (pd2['sma_av3'] < pd2['sma_av6']), 'Signal'] = 2
         pd2.loc[(pd2['Macd_intersection']) & (pd2['macd'] > pd2['macd_signal']), 'MACDSignal'] = 1
         pd2.loc[(pd2['Macd_intersection']) & (pd2['macd'] < pd2['macd_signal']), 'MACDSignal'] = 2
-        # Generate signals
-        # pd2['RSI'] = pd2['rsi'].apply(lambda x: 1 if x < 30 else 2 if x > 70 else 0).astype('int32')
-        # pd2['ADX'] = np.where((pd2['adx'] > 25) & (pd2['adx_pos'] > pd2['adx_neg']), 1,
-        #                       np.where((pd2['adx'] > 25) & (pd2['adx_pos'] < pd2['adx_neg']), 2, 0)).astype('int32')
-
         # Prepare for prediction
-        # pd2['next_close'] = pd2['close'].shift(-1)
-        
-        # pd2['Prediction'] = np.where(pd2['open'] < pd2['close'], 1,
-        #                             np.where(pd2['open'] > pd2['close'], 2, 0)).astype('int32')
-        # pd21 = pd2[(pd2['Signal'] == 1) & (pd2['MACDSignal'] == 1) & (pd2['Prediction'] == 1)]
-        # pd22 = pd2[(pd2['Signal'] == 2) & (pd2['MACDSignal'] == 2) & (pd2['Prediction'] == 2)]
-        # pd23 = pd2[(pd2['Signal'] == 0) & (pd2['MACDSignal'] == 0) & (pd2['Prediction'] == 0)]
-        # pd2 = pda.concat([pd21,pd22,pd23])
-        logger.info(pd2.iloc[-1])
-        pd2.dropna(inplace=True)
-        # Clean up
-        pd2.drop(columns=['sma_av3', 'sma_av6','macd','macd_signal','Intersection', 'Macd_intersection'], inplace=True)
-        logger.info(pd2.iloc[-1])
+        pd2['Signal'] = pd2['Signal'].shift(1)
+        pd2['Signal'] = pd2['Signal'].astype('Int64')
+        # pd2['MACDSignal'] = pd2['MACDSignal'].shift(1)
+        pd2.drop(columns=['sma_av3', 'sma_av6', 'Intersection', 'Macd_intersection'], inplace=True)
+        # pd2.drop(columns=['sma_av3', 'sma_av6','macd','macd_signal','Intersection', 'Macd_intersection', 'next_close'], inplace=True)
         return pd2
     
     @staticmethod
@@ -179,22 +168,20 @@ class OlympTradeTrigger:
         logger.info(f'factral last five {fractal[-5:]}')
         up_contains_true = any(row[0] for row in fractal[-5:])
         down_contains_true = any(row[1] for row in fractal[-5:])
-        if down_contains_true:
-            ma_buy = True
-        elif up_contains_true:
-            ma_sell = True
+        buy_condition = 2 not in df['Signal'].tolist()[-2:] and 2 not in df['MACDSignal'].tolist()[-3:]
+        sell_condition = 1 not in df['Signal'].tolist()[-2:] and 1 not in df['MACDSignal'].tolist()[-3:]
         # logger.info(f'=========={symbol} Fractal values up {up_contains_true} and down {down_contains_true} ==============')
         # logger.info(f'=========={symbol} last 3 {df.iloc[-3:]} ==============')
-        if 1 == df['Signal'].tolist()[-2] and 1 in df['MACDSignal'].tolist()[-3:]:
-            if down_contains_true:
+        if 1 == df['Signal'].tolist()[-1] and 1 in df['MACDSignal'].tolist()[-3:] and buy_condition:
+            if down_contains_true and not any(row[0] for row in fractal[-3:]):
                 ma_buy = True
             # ma_buy = True
             # if down_contains_true and not up_contains_true:
                 # if 75 > rsi_ind.iloc[-1] > 40:
                 # ma_buy = True
-        logger.info(f'lst 2 {symbol} data in candles {df.iloc[-2:]}')
-        if 2 == df['Signal'].tolist()[-2] and 2 in df['MACDSignal'].tolist()[-3:]:
-            if up_contains_true:
+        logger.info(f'lst 2 {symbol} data in candles \n {df.iloc[-5:]}')
+        if 2 == df['Signal'].tolist()[-1] and 2 in df['MACDSignal'].tolist()[-3:] and sell_condition:
+            if up_contains_true and not any(row[1] for row in fractal[-3:]):
                 ma_sell = True
             # ma_sell = True
             # if up_contains_true and not down_contains_true:
@@ -305,12 +292,12 @@ def get_report(request):
     import gspread
     from common.apiconnection.olymptradeapi import OlympTradeAPI
     from oauth2client.service_account import ServiceAccountCredentials
-    scopes = [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-        ]
-    credentials = ServiceAccountCredentials.from_json_keyfile_name('backend/dolphin/google-credentials.json', scopes)
-    gc = gspread.authorize(credentials)
+    # scopes = [
+    #     'https://www.googleapis.com/auth/spreadsheets',
+    #     'https://www.googleapis.com/auth/drive'
+    #     ]
+    # credentials = ServiceAccountCredentials.from_json_keyfile_name('backend/dolphin/google-credentials.json', scopes)
+    # gc = gspread.authorize(credentials)
     s = OlympTradeAPI()
     date_time = datetime.now()
     date_str = date_time.strftime("%d/%m/%Y, %H:%M:%S")
