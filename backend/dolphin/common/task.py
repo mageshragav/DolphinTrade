@@ -6,6 +6,7 @@ import pandas as pd
 from dolphin.celery import app as ap
 from django.conf import settings
 import logging
+import numpy as np
 
 logger = logging.getLogger('dolphin')
 curr_dir = settings.BASE_DIR
@@ -67,6 +68,8 @@ def callorput(assest: str):
     from tradingasset.models import OlympTrade
     from TradingStradegy.mt4stradegies.fractelreversal import FractelReversal
     from TradingStradegy.mt4stradegies.extremespike import ExtremeSpike
+    from TradingStradegy.mt4stradegies.TrendConfirm import TMIndicator
+
     try:
         # assest =assest+'_OTC'
         timing = '300'
@@ -74,26 +77,30 @@ def callorput(assest: str):
         client = OlympTradeTrigger() 
         five_min_data = client.get_candles(pair=assest,size=int(timing))
         frstradegy_5_min = FractelReversal(five_min_data.iloc[::-1],assest)
+        tm_ind_5_min = TMIndicator(five_min_data.iloc[::-1])
         extremestradegy_5_min = ExtremeSpike(five_min_data.iloc[::-1],assest)
-        data = pd.concat([frstradegy_5_min.mainloop(), extremestradegy_5_min.mainloop()],axis=1)
+        data = pd.concat([frstradegy_5_min.mainloop(), extremestradegy_5_min.mainloop(),tm_ind_5_min.mainloop()],axis=1)
         # Check if any of the specified columns have a value of 1
-        extreme_buy = bool(data.iloc[-2:][['line1', 'line2', 'line4', 'line5']].eq(-1).any(axis=1).any())
+        extreme_buy = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(-1).any().any())
         # Check if any of the specified columns have a value of -1
-        extreme_sell = bool(data.iloc[-2:][['line1', 'line2', 'line4', 'line5']].eq(1).any(axis=1).any())
+        extreme_sell = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(1).any().any())
+        # Check if any of the specified columns have a value of -1
+        tm_ind_buy = bool(data.iloc[-2:]['BUY_TM'].any()) or bool(data.iloc[-2:][['up_arrow']].notna().any().any())
+        tm_ind_sell = bool(data.iloc[-2:]['SELL_TM'].any()) or  bool(data.iloc[-2:][['dn_arrow']].notna().any().any())
         # buy,sell= data['BullishReversal'].iloc[-3:], data['BearishReversal'].iloc[-3:]
         # fractel_buy = any([True if i != 0 else False for i in buy])
         # fractel_sell = any([True if i != 0 else False for i in sell])
-        logger.info(assest)
-        logger.info(data.iloc[-5:])
-        logger.info(f"assest {assest} and trend prediction data \n extreme buy {extreme_buy} sell {extreme_sell} ")
-        if extreme_buy and not extreme_sell:
+        ds_data = data.iloc[-5:][['t','line1', 'line2', 'line4', 'line5', "up_arrow", "dn_arrow",  "SELL_TM",  "BUY_TM"]]
+        logger.info(f"{assest} and \n data {ds_data}")
+        logger.info(f"assest {assest} and trend prediction data \n extreme buy {extreme_buy} sell {extreme_sell} \n and tm buy {tm_ind_buy} and tm sell {tm_ind_sell} ")
+        if (extreme_buy and not extreme_sell) and (tm_ind_buy and not tm_ind_sell):
             if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(seconds=int(call_timing))).exists():
                 OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})    
                 msg = f'Recommended for next {int(call_timing)//60} min in {assest} was BUY'
                 logger.info(msg)
                 response = send_telegram_message.apply_async(args=(f"{curr_dir}{IMAGE_GREEN}", msg))
                 response_data = client.olymp_client.get_bet('up',assest,amount='1',duration=f'{call_timing}')
-        elif extreme_sell and not extreme_buy:
+        elif (extreme_sell and not extreme_buy) and (tm_ind_sell and not tm_ind_buy):
             if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(seconds=int(call_timing))).exists():
                 OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})
                 msg = f'Recommended for next {int(call_timing)//60} min in {assest} was SELL'

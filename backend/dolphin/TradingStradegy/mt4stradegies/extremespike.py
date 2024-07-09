@@ -109,7 +109,7 @@ class ExtremeSpike:
                     if self.NoRepaint:
                         self.draw(lineType, low_extreme_idx, self.LINE_VALUE_DOWN)
                     self.drawStableLine(lineType, low_extreme_idx, self.LINE_VALUE_FLAT)
-                    # if signal_type == 'minor':
+                    # if lineType == self.LINE_MINOR:
                     #     signal = 1  # Minor buy signal
                     #     df.at[low_extreme_idx, 'line1'] = line_value
                     # else:
@@ -137,7 +137,7 @@ class ExtremeSpike:
                     if self.NoRepaint:
                         self.draw(lineType, hi_extreme_idx, self.LINE_VALUE_UP)
                     self.drawStableLine(lineType, hi_extreme_idx, self.LINE_VALUE_FLAT)
-                    # if signal_type == 'minor':
+                    # if lineType == self.LINE_MINOR:
                     #     signal = -1  # Minor sell signal
                     #     df.at[hi_extreme_idx, 'line1'] = line_value
                     # else:
