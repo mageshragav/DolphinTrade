@@ -14,7 +14,12 @@ import json
 from ta.trend import macd,cci,adx,macd_signal,adx_pos,adx_neg,sma_indicator,ema_indicator, MACD
 from ta.momentum import rsi,stochrsi_d,stochrsi_k,stochrsi,williams_r
 import numpy as np
+import pandas as pd
 import logging
+from TradingStradegy.mt4stradegies.fractelreversal import FractelReversal
+from TradingStradegy.mt4stradegies.extremespike import ExtremeSpike
+from TradingStradegy.mt4stradegies.TrendConfirm import TMIndicator
+from TradingStradegy.mt4stradegies.movingaverage import MovAvg
 
 logger = logging.getLogger('dolphin')
 # Create your views here.
@@ -141,73 +146,30 @@ class OlympTradeTrigger:
     
     @staticmethod
     def confirm_trend(df: pda.DataFrame, symbol='EURUSD',duration='5m') -> str:
-        from tradingview_ta import TA_Handler, Interval, Exchange, get_multiple_analysis
         df = df.copy()
-        # df.loc[:, 'MA1'] = sma_indicator(df['close'],window=3)
-        # df.loc[:, 'MA2'] = sma_indicator(df['close'],window=6)
-        # df['MACD'] = macd(df['close'],7,5)
-        # df['MACD_SIGNAL'] = macd_signal(df['close'],7,5,4)
-        fractal = OlympTradeTrigger.fractals_pandas(df,5)
-        # intersections = df[(df['MA1'] < df['MA2']) & (df['MA1'].shift(1) > df['MA2'].shift(1)) | 
-        #            (df['MA1'] > df['MA2']) & (df['MA1'].shift(1) < df['MA2'].shift(1))]
-        # df.loc[:,'Intersection'] = False
-        # df.loc[intersections.index, 'Intersection'] = True
-        # df.loc[:,'Signal']= 'Hold'
-        # df.loc[(df['Intersection']) & (df['MA1'] > df['MA2']), 'Signal'] = 'Buy'
-        # df.loc[(df['Intersection']) & (df['MA1'] < df['MA2']), 'Signal'] = 'Sell'
-        # Macd_intersections = df[(df['MACD'] < df['MACD_SIGNAL']) & (df['MACD'].shift(1) > df['MACD_SIGNAL'].shift(1)) | 
-        #            (df['MACD'] > df['MACD_SIGNAL']) & (df['MACD'].shift(1) < df['MACD_SIGNAL'].shift(1))]
-        # df.loc[:,'Macd_intersection'] = False
-        # df.loc[Macd_intersections.index, 'Macd_intersection'] = True
-        # df.loc[:,'MACDSignal']= 'Hold'
-        # df.loc[(df['Macd_intersection']) & (df['MACD'] > df['MACD_SIGNAL']), 'MACDSignal'] = 'Buy'
-        # df.loc[(df['Macd_intersection']) & (df['MACD'] < df['MACD_SIGNAL']), 'MACDSignal'] = 'Sell'
-        # logger.info(f"=========={symbol} {df.iloc[-5:,-5:]}=================")
-        ma_buy = False  
-        ma_sell = False
-        logger.info(f'factral last five {fractal[-5:]}')
-        up_contains_true = any(row[0] for row in fractal[-5:])
-        down_contains_true = any(row[1] for row in fractal[-5:])
-        buy_condition = 2 not in df['Signal'].tolist()[-2:] and 2 not in df['MACDSignal'].tolist()[-3:]
-        sell_condition = 1 not in df['Signal'].tolist()[-2:] and 1 not in df['MACDSignal'].tolist()[-3:]
-        # logger.info(f'=========={symbol} Fractal values up {up_contains_true} and down {down_contains_true} ==============')
-        # logger.info(f'=========={symbol} last 3 {df.iloc[-3:]} ==============')
-        if 1 == df['Signal'].tolist()[-1] and 1 in df['MACDSignal'].tolist()[-3:] and buy_condition:
-            if down_contains_true and not any(row[0] for row in fractal[-3:]):
-                ma_buy = True
-            # ma_buy = True
-            # if down_contains_true and not up_contains_true:
-                # if 75 > rsi_ind.iloc[-1] > 40:
-                # ma_buy = True
-        logger.info(f'lst 2 {symbol} data in candles \n {df.iloc[-5:]}')
-        if 2 == df['Signal'].tolist()[-1] and 2 in df['MACDSignal'].tolist()[-3:] and sell_condition:
-            if up_contains_true and not any(row[1] for row in fractal[-3:]):
-                ma_sell = True
-            # ma_sell = True
-            # if up_contains_true and not down_contains_true:
-                # if 25 < rsi_ind.iloc[-1] < 60:
-                # ma_sell = True
-        # if 'Sell' in (df.iloc[-2,-1],df.iloc[-1,-1]) and df.iloc[-1,-1] != 'Buy':
-        #     if up_contains_true:
-        #         ma_sell = True
-        # ma_buy = 'Buy' in (df.iloc[-1,-1],df.iloc[-2,-1]) and df.iloc[-2,-1] != 'Sell' and rsi_ind.iloc[-1]
-        # ma_sell = 'Sell' in (df.iloc[-1,-1],df.iloc[-2,-1]) and df.iloc[-2,-1] != 'Buy'
-        # data = TA_Handler(
-        #     symbol=symbol,
-        #     screener=SCREENER,
-        #     exchange=EXCHANGE,
-        #     interval=duration
-        # )
-        # recommend = data.get_analysis().summary.get('RECOMMENDATION')
-
-        if ma_buy:
+        tm_ind_5_min = TMIndicator(df)
+        extremestradegy_5_min = ExtremeSpike(df,symbol)
+        mv_ind_5_min = MovAvg(df)
+        data = pd.concat([extremestradegy_5_min.mainloop(),tm_ind_5_min.mainloop(),mv_ind_5_min.mainloop()],axis=1)
+        # Check if any of the specified columns have a value of 1
+        extreme_buy = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(-1).any())
+        # Check if any of the specified columns have a value of -1
+        extreme_sell = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(1).any())
+        # Check if any of the specified columns have a value of -1
+        tm_ind_buy = bool(data.iloc[-2]['BUY_TM'])
+        tm_ind_sell = bool(data.iloc[-2]['SELL_TM'])
+        mv_ind_buy = bool(data.iloc[-2][['CrossUp']].notna().any())
+        mv_ind_sell = bool(data.iloc[-2][['CrossDown']].notna().any())
+        ds_data = data.iloc[-5:][['t','GMT','line1', 'line2', 'line4', 'line5',"SELL_TM",  "BUY_TM", "CrossUp", 'CrossDown']]
+        logger.info(f"{symbol} and \n data {ds_data}")
+        logger.info(f"assest {symbol} and trend prediction data \n extreme buy {extreme_buy} sell {extreme_sell} \n and tm buy {tm_ind_buy} and tm sell {tm_ind_sell} and {mv_ind_buy} and {mv_ind_sell}")
+        
+        if (tm_ind_buy or extreme_buy or mv_ind_buy) and not (tm_ind_sell and extreme_sell and mv_ind_sell):
             return 'BUY'
-        #recommend in ('STRONG_SELL','SELL') and 
-        elif ma_sell:
+        elif (tm_ind_sell or extreme_sell or mv_ind_sell) and not (tm_ind_buy and extreme_buy and mv_ind_buy):
             return 'SELL'
         else:
-            return "NEUTRAL"
-        
+            return 'NEUTRAL'
 
     def get_candles(self,pair,size=60):
         data = self.olymp_client.get_candle(size=size,pair=pair) 
