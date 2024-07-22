@@ -1,3 +1,4 @@
+from TradingStradegy.mt4stradegies import binary_arrows, super_signals, super_signals_v3, tm_indicator
 from common.task import callorput
 from tradingasset.models import *
 from common.socketconnect.Olymptradeconnect import OlympTradeClient
@@ -16,10 +17,7 @@ from ta.momentum import rsi,stochrsi_d,stochrsi_k,stochrsi,williams_r
 import numpy as np
 import pandas as pd
 import logging
-from TradingStradegy.mt4stradegies.fractelreversal import FractelReversal
-from TradingStradegy.mt4stradegies.extremespike import ExtremeSpike
-from TradingStradegy.mt4stradegies.TrendConfirm import TMIndicator
-from TradingStradegy.mt4stradegies.movingaverage import MovAvg
+
 
 logger = logging.getLogger('dolphin')
 # Create your views here.
@@ -32,7 +30,29 @@ class OlympTradeTrigger:
         # self.balance = self.olymp_client.balance
         # # self.s = main.TvDatafeed('mageshragav1@gmail.com','Magesh1@')
         # logger.info(f"Current {balance_key} Balance is : {self.balance}")
-
+    @staticmethod
+    def indicatorCalculations(data_1 : pd.DataFrame):
+        data = data_1.copy()
+        data['LOCAL'] = pd.to_datetime(data['datetime']) - timedelta(hours=5)
+        data['GMT'] = pd.to_datetime(data['datetime']) + timedelta(hours=2)
+        b_arrow = binary_arrows.BinaryArrowSignalPredictor(data.iloc[::-1].reset_index(drop=True)).run()
+        # extreme_b = extreme_binary.ExtremeBinarySignalPredictor(data).run() # works only in 15 mins chart
+        # spike_e = extreme_spike.ExtremeSpikeSignalPredictor(b_arrow.iloc[::-1]).run()
+        # arrow_imm = iim_arrows.IINWMARROWSSignalPredictor(spike_e).run()
+        # arrow_super = super_arrows.SuperArrowSignalPredictor(spike_e).run()
+        super_sig = super_signals.SuperSignalPredictor(b_arrow).run()
+        super_sig_v3 = super_signals_v3.SuperV3SignalPredictor(super_sig).run()
+        new_data = tm_indicator.TMIndicator(super_sig_v3).run()
+        # # Check that all predictors return DataFrames with the same index
+        # data_frames = [data.iloc[:, :8], b_arrow, spike_e, arrow_imm, arrow_super, super_sig, super_sig_v3, tmind]
+        # # Ensure all DataFrames have the same index
+        # for df in data_frames:
+        #     if not df.index.equals(data.index):
+        #         df.index = data.index
+        # new_data = pd.concat(data_frames, axis=1)
+        new_data['next_close'] = new_data['close'].shift(-3)
+        # new_data = pd.concat([data.iloc[:,:8],b_arrow,spike_e,arrow_imm,arrow_super,super_sig,super_sig_v3,tmind])
+        return new_data
     # @staticmethod
     # def calculate_1(pd: pd.DataFrame,predict=True):
     #     pdrsi = rsi(pd['close'],14)
@@ -72,42 +92,22 @@ class OlympTradeTrigger:
     #     pd2.drop(columns=['sma_av3', 'sma_av6'], inplace=True)
     #     return pd2
     
-    @staticmethod
-    def calculate_1(pd: pda.DataFrame, predict=True):
+    def calculate_1(pddata: pd.DataFrame, predict=True):
         # Add indicators to new DataFrame
-        pd2 = pd.iloc[:, :7].copy(deep=True)
-        pd2['macd'] = macd(pd['close'],7,5)
-        pd2['rsi'] = rsi(pd['close'],7)
-        pd2['cci'] = cci(pd['high'],pd['low'],pd['close'],7)
-        pd2['adx'] = adx(pd['high'],pd['low'],pd['close'],2)
-        pd2['wr'] = williams_r(pd['high'],pd['low'],pd['close'],7)
-        pd2['macd_signal'] = macd_signal(pd['close'],7,5,4)
-        pd2['sma_av3'] = sma_indicator(pd['close'], 3)
-        pd2['sma_av6'] = sma_indicator(pd['close'], 6)
-        intersections = pd2[(pd2['sma_av3'] < pd2['sma_av6']) & (pd2['sma_av3'].shift(1) > pd2['sma_av6'].shift(1)) | 
-                    (pd2['sma_av3'] > pd2['sma_av6']) & (pd2['sma_av3'].shift(1) < pd2['sma_av6'].shift(1))]
-        
-        Macd_intersections = pd2[(pd2['macd'] < pd2['macd_signal']) & (pd2['macd'].shift(1) > pd2['macd_signal'].shift(1)) | 
-                    (pd2['macd'] > pd2['macd_signal']) & (pd2['macd'].shift(1) < pd2['macd_signal'].shift(1))]
-        
-        pd2.loc[:,'Intersection'] = False
-        pd2.loc[:,'Macd_intersection'] = False
-        pd2.loc[intersections.index, 'Intersection'] = True
-        pd2.loc[Macd_intersections.index, 'Macd_intersection'] = True
-        pd2.loc[:,'Signal']= 0
-        pd2.loc[:,'MACDSignal']= 0
-        pd2.loc[(pd2['Intersection']) & (pd2['sma_av3'] > pd2['sma_av6']), 'Signal'] = 1
-        pd2.loc[(pd2['Intersection']) & (pd2['sma_av3'] < pd2['sma_av6']), 'Signal'] = 2
-        pd2.loc[(pd2['Macd_intersection']) & (pd2['macd'] > pd2['macd_signal']), 'MACDSignal'] = 1
-        pd2.loc[(pd2['Macd_intersection']) & (pd2['macd'] < pd2['macd_signal']), 'MACDSignal'] = 2
-        # Prepare for prediction
-        pd2['Signal'] = pd2['Signal'].shift(1)
-        pd2['Signal'] = pd2['Signal'].astype('Int64')
-        # pd2['MACDSignal'] = pd2['MACDSignal'].shift(1)
-        pd2.drop(columns=['sma_av3', 'sma_av6', 'Intersection', 'Macd_intersection'], inplace=True)
-        # pd2.drop(columns=['sma_av3', 'sma_av6','macd','macd_signal','Intersection', 'Macd_intersection', 'next_close'], inplace=True)
+        pddata = pddata.copy()
+        pddata.loc[:,'datetime'] = pd.to_datetime(pddata['t'])
+        pd2 = OlympTradeTrigger.indicatorCalculations(pddata)
+        signals = ['datetime','open','high','low','close','next_close',
+                    'BinaryArrow',
+                    'SuperSignalV3','TMSignal','LOCAL','GMT']
+        predit_signals = [
+        'BinaryArrow',
+        'SuperSignalV3'
+        ]
+        pd2[predit_signals] = pd2[predit_signals].shift(1)
+        pd2.to_csv('/tmp/olymp.csv')
+        pd2 = pd2[signals]
         return pd2
-    
     @staticmethod
     def close_calculate(close):
         logger.info(close)
@@ -144,32 +144,32 @@ class OlympTradeTrigger:
         result = df[['up', 'down']].values.tolist()
         return result
     
-    @staticmethod
-    def confirm_trend(df: pda.DataFrame, symbol='EURUSD',duration='5m') -> str:
-        df = df.copy()
-        tm_ind_5_min = TMIndicator(df)
-        extremestradegy_5_min = ExtremeSpike(df,symbol)
-        mv_ind_5_min = MovAvg(df)
-        data = pd.concat([extremestradegy_5_min.mainloop(),tm_ind_5_min.mainloop(),mv_ind_5_min.mainloop()],axis=1)
-        # Check if any of the specified columns have a value of 1
-        extreme_buy = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(-1).any())
-        # Check if any of the specified columns have a value of -1
-        extreme_sell = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(1).any())
-        # Check if any of the specified columns have a value of -1
-        tm_ind_buy = bool(data.iloc[-2]['BUY_TM'])
-        tm_ind_sell = bool(data.iloc[-2]['SELL_TM'])
-        mv_ind_buy = bool(data.iloc[-2][['CrossUp']].notna().any())
-        mv_ind_sell = bool(data.iloc[-2][['CrossDown']].notna().any())
-        ds_data = data.iloc[-5:][['t','GMT','line1', 'line2', 'line4', 'line5',"SELL_TM",  "BUY_TM", "CrossUp", 'CrossDown']]
-        logger.info(f"{symbol} and \n data {ds_data}")
-        logger.info(f"assest {symbol} and trend prediction data \n extreme buy {extreme_buy} sell {extreme_sell} \n and tm buy {tm_ind_buy} and tm sell {tm_ind_sell} and {mv_ind_buy} and {mv_ind_sell}")
+    # @staticmethod
+    # def confirm_trend(df: pda.DataFrame, symbol='EURUSD',duration='5m') -> str:
+    #     df = df.copy()
+    #     tm_ind_5_min = TMIndicator(df)
+    #     extremestradegy_5_min = ExtremeSpike(df,symbol)
+    #     mv_ind_5_min = MovAvg(df)
+    #     data = pd.concat([extremestradegy_5_min.mainloop(),tm_ind_5_min.mainloop(),mv_ind_5_min.mainloop()],axis=1)
+    #     # Check if any of the specified columns have a value of 1
+    #     extreme_buy = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(-1).any())
+    #     # Check if any of the specified columns have a value of -1
+    #     extreme_sell = bool(data.iloc[-2][['line1', 'line2', 'line4', 'line5']].eq(1).any())
+    #     # Check if any of the specified columns have a value of -1
+    #     tm_ind_buy = bool(data.iloc[-2]['BUY_TM'])
+    #     tm_ind_sell = bool(data.iloc[-2]['SELL_TM'])
+    #     mv_ind_buy = bool(data.iloc[-2][['CrossUp']].notna().any())
+    #     mv_ind_sell = bool(data.iloc[-2][['CrossDown']].notna().any())
+    #     ds_data = data.iloc[-5:][['t','GMT','line1', 'line2', 'line4', 'line5',"SELL_TM",  "BUY_TM", "CrossUp", 'CrossDown']]
+    #     logger.info(f"{symbol} and \n data {ds_data}")
+    #     logger.info(f"assest {symbol} and trend prediction data \n extreme buy {extreme_buy} sell {extreme_sell} \n and tm buy {tm_ind_buy} and tm sell {tm_ind_sell} and {mv_ind_buy} and {mv_ind_sell}")
         
-        if (tm_ind_buy or extreme_buy or mv_ind_buy) and not (tm_ind_sell and extreme_sell and mv_ind_sell):
-            return 'BUY'
-        elif (tm_ind_sell or extreme_sell or mv_ind_sell) and not (tm_ind_buy and extreme_buy and mv_ind_buy):
-            return 'SELL'
-        else:
-            return 'NEUTRAL'
+    #     if (tm_ind_buy or extreme_buy or mv_ind_buy) and not (tm_ind_sell and extreme_sell and mv_ind_sell):
+    #         return 'BUY'
+    #     elif (tm_ind_sell or extreme_sell or mv_ind_sell) and not (tm_ind_buy and extreme_buy and mv_ind_buy):
+    #         return 'SELL'
+    #     else:
+    #         return 'NEUTRAL'
 
     def get_candles(self,pair,size=60):
         data = self.olymp_client.get_candle(size=size,pair=pair) 

@@ -1,5 +1,12 @@
 import pandas as pd
+from datetime import timedelta
 import numpy as np
+
+# Stradegy No. 2 TMA Indicator 
+# Description :
+    # Triangular moving average (TMA) indicator is a modified version of a moving average. Similarly to a common MA, triangular moving average
+    # is displayed as a simple line on charts. Triangular moving average is calculated as double-smoothed moving average of the price for the 
+    # past N periods. This makes it really smooth and wave-like
 
 class TMIndicator:
 
@@ -53,7 +60,7 @@ class TMIndicator:
 
     def calculate(self):
         return self.calculate_tma(self.half_length, self.price_column, self.bands_deviations, self.koeff)
-    def mainloop(self):
+    def run(self):
         # Generate arrows
         self.tm_buffer, self.up_buffer, self.dn_buffer = self.calculate()
         for i in range(1, len(self.df) - 1):
@@ -61,14 +68,6 @@ class TMIndicator:
                 self.up_arrow[i] = self.df['high'].iloc[i] + self.df['close'].rolling(window=20).mean().iloc[i] + self.koeff
             if self.df['low'].iloc[i+1] < self.dn_buffer[i+1] and self.df['close'].iloc[i+1] < self.df['open'].iloc[i+1] and self.df['close'].iloc[i] > self.df['open'].iloc[i]:
                 self.dn_arrow[i] = self.df['low'].iloc[i] - self.df['close'].rolling(window=20).mean().iloc[i] - self.koeff
-        # decimal_length = self.df['open'].iloc[0].astype(str).split('.')[1].__len__()
-        # self.df.loc[:, 'tm_buffer'] = self.tm_buffer.round(decimal_length)
-        # self.df.loc[:, 'up_buffer'] = self.up_buffer.round(decimal_length)
-        # self.df.loc[:, 'dn_buffer'] = self.dn_buffer.round(decimal_length)
-        # self.df.loc[:, 'up_arrow'] = self.up_arrow.round(decimal_length)
-        # self.df.loc[:, 'dn_arrow'] = self.dn_arrow.round(decimal_length)
-        # self.df.loc[:, 'SELL_TM'] = self.df.apply(lambda row: min(row['open'], row['close']) <= row['up_buffer'] <= max(row['open'], row['close']), axis=1)
-        # self.df.loc[:, 'BUY_TM'] = self.df.apply(lambda row: min(row['open'], row['close']) <= row['dn_buffer'] <= max(row['open'], row['close']), axis=1)
         # return self.df
         decimal_length = len(str(self.df['open'].iloc[0]).split('.')[1])
         
@@ -78,12 +77,22 @@ class TMIndicator:
         self.df.loc[:, 'dn_buffer'] = np.round(self.dn_buffer, decimal_length)
         self.df.loc[:, 'up_arrow'] = np.round(self.up_arrow, decimal_length)
         self.df.loc[:, 'dn_arrow'] = np.round(self.dn_arrow, decimal_length)
-        
+        self.df['TMSignal'] = 0
         # Vectorized computation for SELL_TM and BUY_TM
-        self.df.loc[:, 'SELL_TM'] = (self.df[['open', 'close']].min(axis=1) <= self.df['up_buffer']) & (self.df['up_buffer'] <= self.df[['open', 'close']].max(axis=1))
-        self.df.loc[:, 'BUY_TM'] = (self.df[['open', 'close']].min(axis=1) <= self.df['dn_buffer']) & (self.df['dn_buffer'] <= self.df[['open', 'close']].max(axis=1))
-        
+        # self.df.loc[:, 'TMSignal'] = (self.df[['open', 'close']].min(axis=1) <= self.df['up_buffer']) & (self.df['up_buffer'] <= self.df[['open', 'close']].max(axis=1)).apply(lambda x: 2 if x else 0)
+        # self.df.loc[:, 'TMSignal'] =(self.df[['open', 'close']].min(axis=1) <= self.df['dn_buffer']) & (self.df['dn_buffer'] <= self.df[['open', 'close']].max(axis=1)).apply(lambda x: 1 if x else 0)
+        self.df.loc[
+            (self.df[['open', 'close']].min(axis=1) <= self.df['up_buffer']) & 
+            (self.df['up_buffer'] <= self.df[['open', 'close']].max(axis=1)), 
+            'TMSignal'
+        ] = 2
+
+        # Set TMSignal to 1 if dn_buffer is within the range of open and close
+        self.df.loc[
+            (self.df[['open', 'close']].min(axis=1) <= self.df['dn_buffer']) & 
+            (self.df['dn_buffer'] <= self.df[['open', 'close']].max(axis=1)), 
+            'TMSignal'
+        ] = 1
+        # self.df.to_csv('/tmp/tmsignal.csv')
+        # return self.df[['TMSignal']]
         return self.df
-
-
-
