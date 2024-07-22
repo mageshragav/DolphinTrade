@@ -68,22 +68,30 @@ def callorput(assest: str):
     from tradingasset.models import OlympTrade
 
     try:
-        # assest =assest+'_OTC'
+        
+        assest =assest+'_OTC'
         timing = '300'
         call_timing = '900'
+        ml_model = pickle.load(open(f'{curr_dir}/common/ml_model/rfclassifier_new_{int(timing)//60}.sav','rb'))
+        ml_model2 = pickle.load(open(f'{curr_dir}/common/ml_model/xgbclassifier_new_{int(timing)//60}.sav','rb'))
         client = OlympTradeTrigger() 
         five_min_data = client.get_candles(pair=assest,size=int(timing))
-        df = five_min_data.iloc[::-1]
-        data = client.confirm_trend(df,symbol=assest)
+        df = five_min_data
+        result_pd = OlympTradeTrigger.calculate_1(df)[['BinaryArrow', 'SuperSignalV3', 'TMSignal']]
+        logger.info(f'\n{result_pd}')
+        ml_output = ml_model.predict(result_pd)
+        ml_output2 = ml_model2.predict(result_pd)
+        logger.info(f'\nml outputs of assest {assest} {ml_output} and {ml_output2}')
+        # data = client.confirm_trend(df,symbol=assest)
         
-        if data == 'BUY':
+        if 1 in (ml_output[-1],ml_output2[-1]):
             if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(seconds=int(call_timing))).exists():
                 OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})    
                 msg = f'Recommended for next {int(call_timing)//60} min in {assest} was BUY'
                 logger.info(msg)
                 response = send_telegram_message.apply_async(args=(f"{curr_dir}{IMAGE_GREEN}", msg))
                 response_data = client.olymp_client.get_bet('up',assest,amount='1',duration=f'{call_timing}')
-        elif data == 'SELL':
+        elif 2 in (ml_output[-1],ml_output2[-1]):
             if not OlympTrade.objects.filter(asset= assest, created_at__gte=datetime.now()-timedelta(seconds=int(call_timing))).exists():
                 OlympTrade.objects.create(**{'asset': assest, 'created_at': datetime.now()})
                 msg = f'Recommended for next {int(call_timing)//60} min in {assest} was SELL'

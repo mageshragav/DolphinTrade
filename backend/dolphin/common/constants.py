@@ -18,7 +18,7 @@ cur_dir = os.getcwd()
 # }
 cookies = {
     'access_token': 'PLACEHOLDER_JWT',
-    'jwt_auth': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3MTgyNzMyMTMsIm5iZiI6MTcxODI3MzIxMywiZXhwIjoxNzE4MzU5NjEzLCJ1c2VyX2lkIjo0NjMwMDA4NCwiZW1haWwiOiJtYWdlc2htZ3IxQGdtYWlsLmNvbSJ9.HtMTbuSH_0vDYT6Trqhbp08UsY98ioeef9avQenLsog61J6FwgvzmVGjTylpgdnQ7yug8eWxKCK-Bz5heYbzD8GC1PObTMP2nmB2c_xGh4mvkFvZKDDOBI2wHiRx9PBrsQZsfM01rdCW_5ljes7V4167vGH3lYdt7bBr9asWnZxQKVClRdiMrvs91SGpPo5Hhq5Va9zYkjrtqt08hHMlASmL2OMJFoxEAmvzc5P6VdW44qRe_P5gyov_rCmpnv7DSpVyeSpPnKE7L3BK3_WWTDb5VGkvkpfMISHAmRyDNHSieG1BpItEYh3rRYp3Dijk05cdtcX2kZHYNvVS2dPmOvTOvffOGyFNrIUPCxdj1laVbN2vbbAc7oR4VRvwhayTZzcfFYOM7cko3gTn7CULSiWOTCAVvrh-gOquyE3pqXPzBa8sVEOsNVv08Lzh4fmg4IRUGCwwqeVZmzuJoT4MhVNk-URNeYh25wSCxcQziVjZJ1OHxkn_h1QSrai0HSQT8RqZazrNx10wfP9ojcSJ8pIzYDkXbq-b68g3JxJYGSd7uZbWy8kxTkqqanoajcZgeY8iYKfZ9Xyim5J1hIliHO1sE2kzhbZEEh5ekUfz8Mz9b45ysHj36XspZ_NIeCrANHnjO4AWBYcWrKgNCrGTMnNnvqOH8svU7gvFS4cmmus',
+    'jwt_auth': 'PLACEHOLDER_JWT',
  }  
 cookies_str = '; '.join([f"{key}={value}" for key, value in cookies.items()])
 # HEADERS = {
