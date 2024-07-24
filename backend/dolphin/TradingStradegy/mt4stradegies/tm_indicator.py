@@ -60,7 +60,7 @@ class TMIndicator:
 
     def calculate(self):
         return self.calculate_tma(self.half_length, self.price_column, self.bands_deviations, self.koeff)
-    def run(self):
+    def run(self) -> pd.DataFrame:
         # Generate arrows
         self.tm_buffer, self.up_buffer, self.dn_buffer = self.calculate()
         for i in range(1, len(self.df) - 1):
@@ -77,10 +77,8 @@ class TMIndicator:
         self.df.loc[:, 'dn_buffer'] = np.round(self.dn_buffer, decimal_length)
         self.df.loc[:, 'up_arrow'] = np.round(self.up_arrow, decimal_length)
         self.df.loc[:, 'dn_arrow'] = np.round(self.dn_arrow, decimal_length)
-        self.df['TMSignal'] = 0
+        self.df.loc[:,'TMSignal'] = 0
         # Vectorized computation for SELL_TM and BUY_TM
-        # self.df.loc[:, 'TMSignal'] = (self.df[['open', 'close']].min(axis=1) <= self.df['up_buffer']) & (self.df['up_buffer'] <= self.df[['open', 'close']].max(axis=1)).apply(lambda x: 2 if x else 0)
-        # self.df.loc[:, 'TMSignal'] =(self.df[['open', 'close']].min(axis=1) <= self.df['dn_buffer']) & (self.df['dn_buffer'] <= self.df[['open', 'close']].max(axis=1)).apply(lambda x: 1 if x else 0)
         self.df.loc[
             (self.df[['open', 'close']].min(axis=1) <= self.df['up_buffer']) & 
             (self.df['up_buffer'] <= self.df[['open', 'close']].max(axis=1)), 
@@ -93,6 +91,4 @@ class TMIndicator:
             (self.df['dn_buffer'] <= self.df[['open', 'close']].max(axis=1)), 
             'TMSignal'
         ] = 1
-        # self.df.to_csv('/tmp/tmsignal.csv')
-        # return self.df[['TMSignal']]
         return self.df

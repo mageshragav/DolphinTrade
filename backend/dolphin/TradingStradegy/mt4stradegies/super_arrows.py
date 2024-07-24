@@ -103,13 +103,13 @@ class SuperArrowSignalGenerator:
             elif (self.Gi_152 and self.Gi_156 and self.Gi_164 and self.Gi_160 and not self.Gi_168 and self.Gi_172 != 2):
                 self.df.at[i, 'SuperArrowSignal'] = 2
                 self.Gi_172 = 2
+        return self.df
 
     def save_results(self, output_file):
         self.df['UTC'] = pd.to_datetime(self.df['datetime']) + timedelta(hours=5)
         self.df['GMT'] = self.df['UTC'] + timedelta(hours=2)
         self.df.to_csv(output_file, index=False)
 
-    def run(self, output_file=None):
+    def run(self, output_file=None) -> pd.DataFrame:
         self.calculate_indicators()
         return self.apply_strategy()
-        # self.save_results(output_file)

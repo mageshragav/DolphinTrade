@@ -9,5 +9,5 @@ s = TvDatafeed('mageshragav1@gmail.com','Magesh1@')
 # #     # m.to_csv('common/MachineLearningModel/output/one_mins/EURUSD_1_Min.csv')
 #     m.to_csv(f'common/MachineLearningModel/output/five_mins/{i}_5_Min_4.csv')
 
-m = s.get_hist(symbol=f'EURUSD',exchange='FX',interval=Interval.in_5_minute,n_bars=9999,extended_session=False)
-m.to_csv(f'common/MachineLearningModel/output/five_mins/EURUSD_5_Min_testing_new.csv')
+m = s.get_hist(symbol=f'GBPJPY',exchange='FX',interval=Interval.in_5_minute,n_bars=9999,extended_session=False)
+m.to_csv(f'common/MachineLearningModel/output/GBPJPY_5_Min_testing_new.csv') # _testing_new
