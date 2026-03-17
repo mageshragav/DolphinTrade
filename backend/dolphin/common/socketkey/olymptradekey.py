@@ -1,0 +1,117 @@
+import random
+import time
+import string
+import json
+# from websocket import create_connection
+import websocket
+from common.constants import HEADERS, OLYMP_WS
+import logging
+
+logger = logging.getLogger('dolphin')
+class OlympTradeConnection():
+    def __init__(self,group='demo') -> None:
+        self.host_v6 = OLYMP_WS
+        self.headers = HEADERS
+        key = 1 if group == 'demo' else 0
+        self.wallet = self.get_connection()
+        self.balance = self.wallet[key]['amount']
+        self.account_id = self.wallet[key]['account_id']
+        self.group_id = group
+
+    def get_connection(self):
+        ws = websocket.create_connection(self.host_v6,header=self.headers)
+        key = str(self.get_wallet_key()).replace("'","\"").replace(" ","")
+        ws.send(key)
+        logger.info(key)
+        logger.info('[{"t":2,"e":98,"uuid":"'+self.generateUuid()+'","d":[54]}]')
+        # [{"t":2,"e":31,"uuid":"nTF3CI","d":[{"account_id":2073645904,"group":"real"}]}]
+        data = json.loads(ws.recv())
+        ws.close()
+        return data[0]['d']
+        # ws = create_connection(self.host_v6,header=self.headers)
+        # try:
+        #     ws.send(self.get_wallet_key())
+        #     logger.info("after sending connection")
+        #     data = json.loads(ws.recv())
+        #     return data[0]["d"]
+        # except:
+        #     ws.close()
+
+    def generateUuid(self,size=18):
+        if size == 6:
+            return ''.join([random.choice(string.ascii_uppercase+string.ascii_lowercase) for n in range(size)])
+        return ''.join([random.choice(string.ascii_uppercase+string.digits) for n in range(size)])
+    
+    def get_bet_key(self,dir,pair,amount="1",duration="60"):
+        data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":str(dir),"pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
+        # forex key
+        # data = [{"t":2,"e":1032,"uuid":f"{self.generateUuid()}","d":[{"amount":5,"multiplicator":500,"dir":str(dir),"pair":str(pair),"stop_loss":{"type":"amount","value":-1,"trailing":False},"take_profit":{"type":"amount","value":1,"trailing":False},"group":"demo","account_id":2747795093}]}]
+        return data
+    
+    def get_wallet_key(self):
+        data = [
+            {"t":2,
+             "e":98,
+             "uuid":f"{self.generateUuid()}",
+             "d":[54]
+            }
+        ]
+        return data
+    
+    def get_on_live_bets(self):
+        data = [
+            {
+                "t": 2,
+                "e": 31,
+                "uuid": self.generateUuid(),
+                "d": [
+                    {
+                        "account_id": self.account_id,
+                        "group": self.group_id,
+                    }
+                ]
+            }
+        ]
+        return f'{data}'
+    
+    def get_currency_key(self):
+        data = [
+            {
+                "t": 2,
+                "e": 98,
+                "uuid": self.generateUuid(),
+                "d": [70]
+            }
+        ]
+        return f'{data}'
+    
+    def get_history_key(self):
+        data = {
+            "limit": 10,
+            "group": self.group_id,
+            "order": "time_close",
+            "page": 1,
+            "account_id": int(self.accountId)
+        }
+        return f'{data}'
+    
+    def get_connection_key(self):
+        data = [
+                {"t":2,
+                 "e":98,
+                 "uuid":self.generateUuid(),
+                 "d":[54]
+                }
+            ]
+            
+        
+        return f'{data}'
+    
+    def get_candle_data_key(self,pair='EURUSD',size=60):
+        data = [
+            {"t":2,
+             "e":10,
+             "uuid":self.generateUuid(size=6),
+             "d":[{"pair":pair,"size":60,"to":int(time.time()),"solid":True}]}]
+        # return f'{data}'.replace('True','true')
+        return '[{"t":2,"e":10,"uuid":"'+self.generateUuid(size=6)+'","d":[{"pair":"'+pair+'","size":'+str(size)+',"to":'+str(int(time.time()))+',"solid":true}]}]'

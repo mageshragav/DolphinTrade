@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forex Data</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #dddddd;
+      text-align: left;
+      padding: 8px;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .win {
+      background-color: lightgreen;
+    }
+    .loose {
+      background-color: tomato;
+    }
+    .other {
+      background-color: lightyellow;
+    }
+  </style>
+</head>
+<body>
+  <h2> SUMMARY </h2>
+  <table>
+    <tr>
+        <th>Category</th>
+        <th>Value</th>
+    </tr>
+    <tr>
+        <td>Win Count</td>
+        <td>{{ get_results.win_count }}</td>
+    </tr>
+    <tr>
+        <td>Loose Count</td>
+        <td>{{ get_results.loose_count }}</td>
+    </tr>
+    <tr>
+        <td>Draw Count</td>
+        <td>{{ get_results.draw_count }}</td>
+    </tr>
+    <tr>
+        <td>Profit</td>
+        <td>{{ get_results.Profit }}</td>
+    </tr>
+  </table>
+{% for pair, data_list in forex_data.items %}
+  <h2>{{ pair }}</h2>
+  <table>
+    <tr>
+      <th>Direction</th>
+      <th>Status</th>
+      <th>Duration</th>
+      <th>Open</th>
+      <th>Close</th>
+    </tr>
+    {% for data in data_list %}
+        {% if data.duration >= 290 and data.duration <= 310 %}
+        <tr>
+        <td>{{ data.direction }}</td>
+        {% if data.status == 'win' %}
+        <td class="win">{{ data.status }}</td>
+        {% elif data.status == 'loose' %}
+        <td class="loose">{{ data.status }}</td>
+        {% else %}
+        <td class="other">{{ data.status }}</td>
+        {% endif %}
+        
+        <td>{{ data.duration }}</td>
+        <td>{{ data.open }}</td>
+        <td>{{ data.close }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+  </table>
+{% endfor %}
