@@ -175,7 +175,16 @@ class DecisionService:
             p_call, p_put = float(P[1]), float(P[2])
             best = max(p_call, p_put)
             direction = 'CALL' if p_call >= p_put else 'PUT'
-            ev = best * (self.payout - SLIPPAGE_TAX) - (1 - best)
+            # use the broker's real payout for the pair when known (the
+            # digital market's profitability is published live); fall back
+            # to the configured flat payout
+            payout = self.payout
+            try:
+                from app.connectors import instruments
+                payout = instruments.payout_for(symbol.split(':')[-1])
+            except Exception:
+                pass
+            ev = best * (payout - SLIPPAGE_TAX) - (1 - best)
             trade = best >= gate and not veto and ev > 0.0
 
             mrow = meta_by_symbol.loc[symbol].iloc[-1]

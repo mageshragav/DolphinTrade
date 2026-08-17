@@ -29,23 +29,25 @@ cookies = {
     'otrhIIBzICu': 'a4c45c4101c87a0458b32ff9245cd0ef',
     '_cfuvid': 'DXYIfSfGGKd8j2OJueeVn18M0a6CgxevYYFSGPSjVSA-1786867019.2185855-1.0.1.1-dnUlvRPylr0r78t1biEOGzHzidSlwM1b_CUq04bUHfE',
     'access_token': 'PLACEHOLDER_JWT',
+    'refresh_token': 'PLACEHOLDER_JWT',
 }
   
 cookies_str = '; '.join([f'{key}={value}' for key, value in cookies.items()])
 
 
-def set_access_token(token: str) -> None:
-    """Hot-swap the session token in place (no restart needed).
-
-    Updates the shared cookies dict + derived strings; all sockets read these
-    at connect time, so reconnecting the clients picks up the new token.
-    """
-    cookies['access_token'] = token
+def set_cookie(name: str, value: str) -> None:
+    """Update a session cookie in place and refresh the derived strings."""
+    cookies[name] = value
     globals()['cookies_str'] = '; '.join(f'{k}={v}' for k, v in cookies.items())
     if 'HEADERS' in globals():
         globals()['HEADERS']['Cookie'] = globals()['cookies_str']
     if 'DEALS_HEADERS' in globals():
         globals()['DEALS_HEADERS']['cookie'] = globals()['cookies_str']
+
+
+def set_access_token(token: str) -> None:
+    """Hot-swap the session token in place (no restart needed)."""
+    set_cookie('access_token', token)
 # HEADERS = {
 #     'Pragma': 'no-cache',
 #     'Origin': 'https://olymptrade.com',
@@ -97,7 +99,7 @@ DEALS_HEADERS = {
     'x-cid-os': 'linux@x86_64',
     'x-cid-ver': '1',
 }
-OLYMP_WS = r"wss://ws.olymptrade.com/otp?cid_ver=1&cid_app=web%40OlympTrade%402026.3.2302984%402302984&cid_device=%40%40desktop&cid_os=linux%40none"
+OLYMP_WS = r"wss://ws.olymptrade.com/otp?cid_ver=1&cid_app=web%40OlympTrade%402026.3.2330613%402330613&cid_device=%40%40desktop&cid_os=linux%40none"
 TRADINGVIEW_URL = 'https://scanner.tradingview.com/symbol?symbol=FX_IDC:{symbol}&fields=Recommend.Other|{duration},Recommend.All|{duration},Recommend.MA|{duration},RSI|{duration},RSI[1]|{duration},Stoch.K|{duration},Stoch.D|{duration},Stoch.K[1]|{duration},Stoch.D[1]|{duration},CCI20|{duration},CCI20[1]|{duration},ADX|{duration},ADX+DI|{duration},ADX-DI|{duration},ADX+DI[1]|{duration},ADX-DI[1]|{duration},AO|{duration},AO[1]|{duration},AO[2]|{duration},Mom|{duration},Mom[1]|{duration},MACD.macd|{duration},MACD.signal|{duration},Rec.Stoch.RSI|{duration},Stoch.RSI.K|{duration},Rec.WR|{duration},W.R|{duration},Rec.BBPower|{duration},BBPower|{duration},Rec.UO|{duration},UO|{duration},EMA10|{duration},close|{duration},SMA10|{duration},EMA20|{duration},SMA20|{duration},EMA30|{duration},SMA30|{duration},EMA50|{duration},SMA50|{duration},EMA100|{duration},SMA100|{duration},EMA200|{duration},SMA200|{duration},Rec.Ichimoku|{duration},Ichimoku.BLine|{duration},Rec.VWMA|{duration},VWMA|{duration},Rec.HullMA9|{duration},HullMA9|{duration},Pivot.M.Classic.S3|{duration},Pivot.M.Classic.S2|{duration},Pivot.M.Classic.S1|{duration},Pivot.M.Classic.Middle|{duration},Pivot.M.Classic.R1|{duration},Pivot.M.Classic.R2|{duration},Pivot.M.Classic.R3|{duration},Pivot.M.Fibonacci.S3|{duration},Pivot.M.Fibonacci.S2|{duration},Pivot.M.Fibonacci.S1|{duration},Pivot.M.Fibonacci.Middle|{duration},Pivot.M.Fibonacci.R1|{duration},Pivot.M.Fibonacci.R2|{duration},Pivot.M.Fibonacci.R3|{duration},Pivot.M.Camarilla.S3|{duration},Pivot.M.Camarilla.S2|{duration},Pivot.M.Camarilla.S1|{duration},Pivot.M.Camarilla.Middle|{duration},Pivot.M.Camarilla.R1|{duration},Pivot.M.Camarilla.R2|{duration},Pivot.M.Camarilla.R3|{duration},Pivot.M.Woodie.S3|{duration},Pivot.M.Woodie.S2|{duration},Pivot.M.Woodie.S1|{duration},Pivot.M.Woodie.Middle|{duration},Pivot.M.Woodie.R1|{duration},Pivot.M.Woodie.R2|{duration},Pivot.M.Woodie.R3|{duration},Pivot.M.Demark.S1|{duration},Pivot.M.Demark.Middle|{duration},Pivot.M.Demark.R1|{duration}&no_404=true'
 #############TRADING VIEW CONSTANTS################
 EXCHANGE = 'FX_IDC'

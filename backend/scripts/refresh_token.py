@@ -30,13 +30,15 @@ import urllib.request
 CDP_PORT = 9222
 PROFILE = '/tmp/olymp-chrome-profile'
 ORIGIN = os.environ.get('DT_OLYMP_ORIGIN', 'https://olymptrade.com')
-LOGIN_URL = ORIGIN + '/en/login/'
+LOGIN_URL = ORIGIN + '/'  # login is a modal on the main page
 
 WS = None
 _msg = 0
+CHROME_PROC = None
 
 
 def _launch_chrome(profile: str):
+    global CHROME_PROC
     exe = '/usr/bin/google-chrome'
     if not os.path.exists(exe):
         for c in ('google-chrome-stable', 'chromium', 'chromium-browser'):
@@ -55,7 +57,8 @@ def _launch_chrome(profile: str):
         '--disable-blink-features=AutomationControlled',
         'about:blank',
     ]
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    CHROME_PROC = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
     for _ in range(60):
         try:
             with urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json/version', timeout=2):
@@ -66,12 +69,30 @@ def _launch_chrome(profile: str):
 
 
 def _ws_connect():
+    """Connect to the PAGE target (Network/Page domains live there)."""
     global WS
     import websocket
-    with urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json/version', timeout=3) as r:
-        ws_url = json.loads(r.read())['webSocketDebuggerUrl']
-    WS = websocket.create_connection(ws_url, timeout=120)
+    with urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json', timeout=3) as r:
+        pages = json.loads(r.read())
+    if not pages:
+        raise SystemExit('no CDP page target')
+    page = next((p for p in pages if p.get('type') == 'page'), pages[0])
+    WS = websocket.create_connection(page['webSocketDebuggerUrl'], timeout=120)
     return WS
+
+
+def _shutdown():
+    global WS, CHROME_PROC
+    if WS is not None:
+        try:
+            WS.close()
+        except Exception:
+            pass
+    if CHROME_PROC is not None:
+        try:
+            CHROME_PROC.terminate()
+        except Exception:
+            pass
 
 
 def _cdp(method, params=None):
@@ -115,16 +136,26 @@ def _wait_js(expr, timeout, interval=1.0):
 
 
 def _fill_and_submit(email: str, password: str):
-    """Fill the login form (same-origin JS) and click the submit button."""
+    """Open the login modal on the main page, fill the form, submit."""
     _cdp('Page.enable')
     _cdp('Runtime.enable')
-    _cdp('Page.navigate', {'url': LOGIN_URL})
-    _wait_js("document.querySelectorAll('input').length > 0", 30)
+    _cdp('Page.navigate', {'url': ORIGIN + '/'})
+    _wait_js("document.querySelectorAll('a,button').length > 0", 30)
+    # open the login modal
+    clicked = _js("""
+      (() => { const el = [...document.querySelectorAll('a,button')]
+        .find(e => /sign\\s*in/i.test(e.textContent || ''));
+        if (el) { el.click(); return true; } return false; })()
+    """)
+    if not clicked:
+        print('[login] no "Sign in" button found')
+        return 'no-signin'
+    if not _wait_js("document.querySelectorAll('input').length >= 2", 30):
+        return 'no-modal'
     js = """
     (() => {
-      const inputs = [...document.querySelectorAll('input')];
-      const set = (types, val) => {
-        const el = inputs.find(i => types.includes((i.type||'').toLowerCase()));
+      const byName = n => document.querySelector('input[name="' + n + '"]');
+      const set = (el, val) => {
         if (!el) return false;
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         setter.call(el, val);
@@ -132,13 +163,20 @@ def _fill_and_submit(email: str, password: str):
         el.dispatchEvent(new Event('change', {bubbles: true}));
         return true;
       };
-      const eOk = set(['email', 'text', 'tel'], %E%);
-      const pOk = set(['password'], %P%);
-      const btn = [...document.querySelectorAll('button')]
-        .find(b => /log\\s*in|sign\\s*in|log\\s*on/i.test(b.textContent || ''));
+      const eOk = set(byName('email') || [...document.querySelectorAll('input')]
+        .find(i => ['email','text','tel'].includes((i.type||'').toLowerCase())), %E%);
+      const pOk = set(byName('password') || [...document.querySelectorAll('input')]
+        .find(i => (i.type||'').toLowerCase() === 'password'), %P%);
+      // exact submit selector from the live modal DOM
       let clicked = false;
+      const btn = document.querySelector('button[data-test="form-signin-button"]')
+        || [...document.querySelectorAll('button')].filter(b => {
+             const t = (b.textContent||'').trim().toLowerCase();
+             return t === 'log in' || t === 'sign in'; }).pop();
       if (btn) { btn.click(); clicked = true; }
-      return JSON.stringify({eOk, pOk, clicked, n: inputs.length});
+      const form = btn && btn.form;
+      if (form && !clicked) { form.requestSubmit(); clicked = true; }
+      return JSON.stringify({eOk, pOk, clicked, n: document.querySelectorAll('input').length});
     })()
     """.replace('%E%', json.dumps(email)).replace('%P%', json.dumps(password))
     return _js(js)
@@ -256,4 +294,7 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        _shutdown()

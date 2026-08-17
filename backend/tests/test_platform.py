@@ -27,6 +27,11 @@ pytestmark = pytest.mark.asyncio
 
 @pytest_asyncio.fixture(autouse=True)
 async def db():
+    from app.connectors import instruments as _inst
+    with _inst._LOCK:
+        _inst._CACHE['ts'] = __import__('time').time()   # fresh+empty: no probe
+        _inst._CACHE['profitability'] = {}
+        _inst._CACHE['schedule'] = {}
     await init_db()
     yield
     async with SessionLocal() as s:
@@ -374,7 +379,7 @@ def test_olymp_ws_matches_live_capture():
     'invalid_origin') and permessage-deflate negotiated via extensions=."""
     from common.constants import OLYMP_WS, HEADERS, OLYMP_ORIGIN, OLYMP_EXTENSIONS
     assert OLYMP_WS == ('wss://ws.olymptrade.com/otp?cid_ver=1'
-                        '&cid_app=web%40OlympTrade%402026.3.2302984%402302984'
+                        '&cid_app=web%40OlympTrade%402026.3.2330613%402330613'
                         '&cid_device=%40%40desktop&cid_os=linux%40none')
     assert OLYMP_ORIGIN == 'https://olymptrade.com'
     assert 'Origin' not in HEADERS                    # must go via origin=
@@ -676,3 +681,198 @@ async def test_dual_mode_places_both_markets():
         assert by_mode['multiplier'].broker_ref == 'fake-2'
         assert by_mode['multiplier'].expiry_time is None
         assert by_mode['binary'].expiry_time is not None
+
+
+def test_normalize_order_types_handles_legacy_and_lists():
+    """order_types accepts lists, legacy single strings, and stays sane."""
+    from app.services import risk as r
+    assert r.normalize_order_types({'order_type': 'binary'}) == ['binary']
+    assert r.normalize_order_types({'order_type': 'multiplier'}) == ['multiplier']
+    assert r.normalize_order_types({'order_types': ['binary', 'multiplier']}) \
+        == ['binary', 'multiplier']
+    assert r.normalize_order_types({'order_types': 'binary,multiplier'}) \
+        == ['binary', 'multiplier']
+    assert r.normalize_order_types({'order_types': ['x']}) == ['binary']
+    assert r.normalize_order_types({}) == ['binary']
+
+
+async def test_get_limits_legacy_precedence_async():
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'dry_run': False, 'order_type': 'multiplier'})
+        limits = await risk.get_limits(s)
+        assert limits['order_types'] == ['multiplier']
+        assert limits['dry_run'] is False
+
+
+async def test_auto_refresh_skips_without_credentials():
+    """The watchdog must not launch Chrome when credentials are unset."""
+    import os as _os
+    from app.trading.scheduler import Scheduler
+    sch = Scheduler(None, None)
+    _os.environ.pop('DT_OLYMP_EMAIL', None)
+    _os.environ.pop('DT_OLYMP_PASSWORD', None)
+    assert await sch._auto_refresh_token(force=True) is False
+
+
+def test_refresh_script_requires_credentials_to_login():
+    """The script refuses to run a login flow without env credentials."""
+    import os as _os
+    _os.environ.pop('DT_OLYMP_EMAIL', None)
+    _os.environ.pop('DT_OLYMP_PASSWORD', None)
+    code = compile(open('scripts/refresh_token.py').read(), 'refresh_token.py', 'exec')
+    assert 'DT_OLYMP_EMAIL' in open('scripts/refresh_token.py').read()
+
+
+async def test_dual_mode_binary_leg_rejected():
+    """When the broker rejects one leg (e.g. plain binary market closed),
+    that leg records as cancelled with the broker message and the other
+    leg still places."""
+    connector = FakeConnector()
+    svc = ExecutionService(connector)
+
+    class FlakyConnector(FakeConnector):
+        def place_bet(self, symbol, direction, amount, duration_sec=None,
+                      order_type='binary', multiplicator=100,
+                      take_profit=None, stop_loss=None):
+            if order_type == 'binary':
+                return {'error': 'The currency pair is unavailable',
+                        'code': 'pair_unavailable'}
+            return super().place_bet(symbol, direction, amount,
+                                     duration_sec=duration_sec,
+                                     order_type=order_type,
+                                     multiplicator=multiplicator,
+                                     take_profit=take_profit, stop_loss=stop_loss)
+
+    flaky = FlakyConnector()
+    svc2 = ExecutionService(flaky)
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'dry_run': False, 'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary', 'multiplier']})
+        r = await svc2.execute(s, sample_decision(), decision_id=90)
+        assert r['placed'] is True                  # multiplier leg placed
+        assert r['placed_count'] == 1
+        trades = await persistence.last_trades(s, 5)
+        by_mode = {t.order_type: t for t in trades}
+        assert by_mode['binary'].status == 'cancelled'
+        assert 'pair_unavailable' in (by_mode['binary'].reason or '')
+        assert by_mode['multiplier'].status == 'open'
+        assert by_mode['multiplier'].broker_ref.startswith('fake-')
+
+
+def test_renew_cookie_parser():
+    """Set-Cookie parsing must extract access/refresh/__cflb from the live
+    renew endpoint's headers."""
+    from app.connectors.olymp import _parse_renew_cookies
+    headers = [
+        'refresh_token=; Path=/api/token/renew/web; Domain=olymptrade.com; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0',
+        'access_token=eyJhbGciOiJSUzI1NiJ9.newaccess; Path=/; HttpOnly; Secure; SameSite=None',
+        'refresh_token=eyJhbGciOiJSUzI1NiJ9.newrefresh; Path=/api/token/renew/web; HttpOnly',
+        '__cflb=02DiuGSURUTCLDAS4xX8HLyoQLMaecKhHTTQY1QgWx8eY; HttpOnly; SameSite=None; Secure; Path=/; Expires=Tue, 18 Aug 2026 04:02:12 GMT',
+    ]
+    parsed = _parse_renew_cookies(headers)
+    assert parsed['access_token'] == 'eyJhbGciOiJSUzI1NiJ9.newaccess'
+    assert parsed['refresh_token'] == 'eyJhbGciOiJSUzI1NiJ9.newrefresh'
+    assert parsed['__cflb'].startswith('02Diu')
+
+
+async def test_cooldown_skips_cancelled_trades():
+    """Cancelled/never-placed trades must not trigger the symbol cooldown."""
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'dry_run': False, 'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 300,
+                                  'stake_pct': 0.01, 'equity': 1000.0})
+        await persistence.record_trade(s, {'decision_id': 91, 'symbol': 'FX:EURUSD',
+                                           'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+                                           'entry': 1.08, 'stake': 10.0, 'dry_run': False,
+                                           'status': 'cancelled', 'expiry_time': None,
+                                           'reason': 'cancelled: broker rejected',
+                                           'candle_close_ts': '2026-08-12T10:00:00'})
+        ok, why = await risk.allowed(s, 'FX:EURUSD')
+        assert ok, why
+
+
+async def test_idempotency_ignores_cancelled():
+    """A cancelled (never-placed) trade must not block a retry of the same
+    signal - the broker error could be transient."""
+    connector = FakeConnector()
+    svc = ExecutionService(connector)
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'dry_run': False, 'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary']})
+        # record a cancelled trade with the same signal identity
+        await persistence.record_trade(s, {'decision_id': 92, 'symbol': 'FX:EURUSD',
+                                           'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+                                           'entry': 1.08, 'stake': 10.0, 'dry_run': False,
+                                           'status': 'cancelled', 'expiry_time': None,
+                                           'reason': 'cancelled: broker rejected',
+                                           'candle_close_ts': '2026-08-12 10:00:00'})
+        r = await svc.execute(s, sample_decision(), decision_id=93)
+        assert r['placed'] is True                  # retry allowed
+        assert r['broker_ref'] == 'fake-1'
+
+
+def test_instruments_payout_and_tradability():
+    """Profitability -> payout conversion and the closed-market flag."""
+    import time as _t
+    from app.connectors import instruments as inst
+    with inst._LOCK:
+        inst._CACHE['profitability'] = {'EURUSD': 82.0, 'USDJPY': 10.0}
+        inst._CACHE['schedule'] = {'EURGBP': {'locked': True, 'time_open': 0,
+                                              'time_close': 0, 'winperc': 0}}
+        inst._CACHE['ts'] = _t.time()              # fresh: no live probe
+    assert inst.payout_for('EURUSD') == 0.82
+    assert inst.payout_for('USDJPY') == inst.DEFAULT_PAYOUT      # closed -> flat
+    assert inst.payout_for('XXXXXX') == inst.DEFAULT_PAYOUT      # unknown
+    ok, why = inst.pair_tradable('EURUSD')
+    assert ok, why
+    ok2, why2 = inst.pair_tradable('USDJPY')
+    assert not ok2 and 'closed' in why2
+    ok3, why3 = inst.pair_tradable('EURGBP')
+    assert not ok3 and 'locked' in why3
+
+
+def test_cid_app_current_version():
+    from common.constants import OLYMP_WS
+    assert '2026.3.2330613' in OLYMP_WS
+
+
+async def test_multiplier_retries_without_sl_tp_on_stop_error():
+    """When the broker rejects SL/TP (incorrect_stop_condition) the leg
+    retries without levels instead of failing."""
+
+    class StopRejectConnector(FakeConnector):
+        def __init__(self):
+            super().__init__()
+            self.rejected = 0
+
+        def place_bet(self, symbol, direction, amount, duration_sec=None,
+                      order_type='binary', multiplicator=100,
+                      take_profit=None, stop_loss=None):
+            if order_type == 'multiplier' and (take_profit or stop_loss):
+                self.rejected += 1
+                return {'error': 'Invalid Take Profit or Stop Loss value',
+                        'code': 'incorrect_stop_condition'}
+            return super().place_bet(symbol, direction, amount,
+                                     duration_sec=duration_sec,
+                                     order_type=order_type,
+                                     multiplicator=multiplicator,
+                                     take_profit=take_profit, stop_loss=stop_loss)
+
+    connector = StopRejectConnector()
+    svc = ExecutionService(connector)
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'dry_run': False, 'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['multiplier']})
+        r = await svc.execute(s, sample_decision(), decision_id=95)
+        assert r['placed'] is True
+        assert connector.rejected == 1             # first attempt had SL/TP
+        placed = connector.placed
+        assert len(placed) == 1                    # retry without levels
+        assert placed[0]['take_profit'] is None and placed[0]['stop_loss'] is None
+

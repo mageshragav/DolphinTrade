@@ -22,14 +22,24 @@ class OlympTradeConnection():
         ws = websocket.create_connection(self.host_v6, header=self.headers,
                                          origin=OLYMP_ORIGIN,
                                          extensions=OLYMP_EXTENSIONS)
-        key = str(self.get_wallet_key()).replace("'","\"").replace(" ","")
-        ws.send(key)
-        logger.info(key)
-        logger.info('[{"t":2,"e":98,"uuid":"'+self.generateUuid()+'","d":[54]}]')
-        # [{"t":2,"e":31,"uuid":"nTF3CI","d":[{"account_id":2073645904,"group":"real"}]}]
-        data = json.loads(ws.recv())
+        ws.send(json.dumps(self.get_wallet_key()))
+        # the server may send an empty control frame first - skip until a
+        # parseable wallet response arrives
+        for _ in range(20):
+            try:
+                raw = ws.recv()
+            except Exception:
+                break
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            if isinstance(data, list) and data and isinstance(data[0], dict) \
+                    and data[0].get('d'):
+                ws.close()
+                return data[0]['d']
         ws.close()
-        return data[0]['d']
+        raise RuntimeError('wallet fetch failed: no valid reply')
         # ws = create_connection(self.host_v6,header=self.headers)
         # try:
         #     ws.send(self.get_wallet_key())

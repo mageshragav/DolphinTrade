@@ -68,6 +68,9 @@ class Scheduler:
             _os.path.dirname(_os.path.abspath(__file__)))), 'scripts', 'refresh_token.py')
         if not _os.path.exists(script):
             return False
+        if not (_os.environ.get('DT_OLYMP_EMAIL') and _os.environ.get('DT_OLYMP_PASSWORD')):
+            LOGGER.warning('auto token refresh skipped: DT_OLYMP_EMAIL/PASSWORD not set')
+            return False
         api = _os.environ.get('DT_PUBLIC_URL', 'http://127.0.0.1:8000')
         self._last_refresh_attempt = now
         env = dict(_os.environ)
@@ -91,28 +94,59 @@ class Scheduler:
         return True
 
     async def _check_token_health(self):
-        """Warn once per threshold as the session token nears expiry; trigger
-        the auto-login before it dies."""
-        from app.connectors.olymp import token_expiry, token_ok
+        """Renew the session before it dies (refresh-token endpoint), warn on
+        thresholds, and fall back to headless login + manual paste."""
+        from app.connectors.olymp import renew_session, token_expiry, token_ok
         from app.runtime_ctx import RUNTIME
         exp = token_expiry()
+        now = datetime.now(timezone.utc)
+        if exp is None:
+            left_h = -1.0
+        else:
+            left_h = (exp - now).total_seconds() / 3600.0
+
+        # primary path: refresh-token renew (no captcha) when close to expiry
+        if left_h <= 12.0:
+            res = await asyncio.to_thread(renew_session)
+            if res.get('ok'):
+                LOGGER.info(f'session token auto-renewed: {res.get("expires_at")}')
+                bot = RUNTIME.get('telegram')
+                if bot:
+                    try:
+                        bot.send(f'🔑 Session token auto-renewed - valid until '
+                                 f'{res.get("expires_at")}')
+                    except Exception:
+                        pass
+                rt = RUNTIME.get('runtime')
+                if rt is not None and getattr(rt, 'connector', None) is not None:
+                    try:
+                        from app.connectors.olymp import token_expiry as te2
+                        rt.connector.set_token(
+                            __import__('common.constants', fromlist=['cookies'])
+                            .cookies['access_token'])
+                    except Exception as e:
+                        LOGGER.warning(f'post-renew reconnect failed: {e}')
+                return
+            LOGGER.warning(f'auto renew failed ({res.get("msg")}) - '
+                           f'falling back to headless login')
+
+        # fallback: headless chrome login
+        if left_h <= 12.0:
+            await self._auto_refresh_token()
+
         if exp is None:
             if 'missing' not in self._token_warned:
                 self._token_warned.add('missing')
                 bot = RUNTIME.get('telegram')
                 msg = ('OLYMP SESSION TOKEN MISSING/INVALID - order placement '
-                       'will fail. Auto-refresh attempted; fallback: /token <jwt>')
+                       'will fail. Fallback: /token <jwt>')
                 LOGGER.error(msg)
-                await self._auto_refresh_token(force=True)
                 if bot:
                     try:
                         bot.send(msg)
                     except Exception:
                         pass
             return
-        left_h = (exp - datetime.now(timezone.utc)).total_seconds() / 3600.0
-        if left_h <= 12.0:
-            await self._auto_refresh_token()
         for threshold, label in ((6.0, '6h'), (2.0, '2h'), (0.5, '30min')):
             if left_h <= threshold and f'{threshold}' not in self._token_warned:
                 self._token_warned.add(f'{threshold}')

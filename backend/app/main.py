@@ -58,6 +58,13 @@ async def lifespan(app: FastAPI):
     RUNTIME['runtime'] = runtime
     RUNTIME['scheduler'] = scheduler
 
+    # instrument intelligence (live payouts + market schedule) in background
+    try:
+        from app.connectors import instruments
+        asyncio.create_task(asyncio.to_thread(instruments.refresh, True))
+    except Exception as e:
+        LOGGER.warning(f'instrument refresh launch failed: {e}')
+
     telegram = TelegramBot()
     telegram.start()
     RUNTIME['telegram'] = telegram

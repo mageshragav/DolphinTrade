@@ -170,6 +170,23 @@ class TelegramBot:
                 return 'token updated and verified' if ok else 'token update FAILED'
             self._send_reply(msg, _asyncio.run(_swap()))
 
+        @self.bot.message_handler(commands=['renew'])
+        def on_renew(msg):
+            """/renew - renew the session token via the refresh endpoint."""
+            import asyncio as _asyncio
+            from app.connectors.olymp import renew_session
+            from app.runtime_ctx import RUNTIME
+            async def _do():
+                res = await _asyncio.to_thread(renew_session)
+                if res.get('ok'):
+                    rt = RUNTIME.get('runtime')
+                    if rt is not None and getattr(rt, 'connector', None) is not None:
+                        from common.constants import cookies
+                        rt.connector.set_token(cookies['access_token'])
+                    return f'Token renewed - valid until {res.get("expires_at")}'
+                return f'Renew failed: {res.get("msg")}'
+            self._send_reply(msg, _asyncio.run(_do()))
+
         @self.bot.message_handler(commands=['mode'])
         def on_mode(msg):
             """/mode - toggle which markets each signal trades (binary / multiplier)."""

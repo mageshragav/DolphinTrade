@@ -35,6 +35,62 @@ def token_ok() -> bool:
     return exp is not None and exp > datetime.now(timezone.utc)
 
 
+RENEW_URL = 'https://gw.olymptrade.com/api/token/renew/web/v1'
+
+
+def _parse_renew_cookies(set_cookie_headers: list[str]) -> dict:
+    """Extract the renewed session from the endpoint's Set-Cookie headers."""
+    out = {}
+    for sc in set_cookie_headers:
+        name, _, val = sc.partition('=')
+        name = name.strip()
+        if name in ('access_token', 'refresh_token', '__cflb'):
+            out[name] = val.split(';')[0].strip()
+    return out
+
+
+def renew_session() -> dict:
+    """Renew the access token via the broker's refresh-token endpoint.
+
+    No captcha, no browser: the refresh_token (3-year life) is sent as a
+    cookie and the endpoint returns fresh access_token + rotated
+    refresh_token as Set-Cookie. Returns {'ok', 'expires_at', 'msg'}.
+    """
+    from common import constants as const
+    import urllib.request
+    req = urllib.request.Request(
+        RENEW_URL, data=b'',
+        headers={
+            'accept': '*/*',
+            'accept-language': 'en-GB,en;q=0.9',
+            'content-type': 'application/json',
+            'cookie': const.cookies_str,
+            'origin': 'https://olymptrade.com',
+            'referer': 'https://olymptrade.com/',
+            'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+            'x-cid-app': 'web@OlympTrade@2026.3.2330613@2330613',
+            'x-cid-device': '@@desktop',
+            'x-cid-os': 'linux@none',
+            'x-cid-ver': '1',
+        })
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            parsed = _parse_renew_cookies(r.headers.get_all('Set-Cookie') or [])
+        new_access = parsed.get('access_token')
+        if not new_access:
+            return {'ok': False, 'msg': 'renew: no access_token in reply',
+                    'expires_at': None}
+        if parsed.get('refresh_token'):
+            const.set_cookie('refresh_token', parsed['refresh_token'])
+        if parsed.get('__cflb'):
+            const.set_cookie('__cflb', parsed['__cflb'])
+        const.set_access_token(new_access)
+        return {'ok': True, 'msg': 'renewed', 'expires_at': str(token_expiry())}
+    except Exception as e:
+        return {'ok': False, 'msg': f'renew failed: {e}', 'expires_at': None}
+
+
 class OlympConnector:
     def __init__(self, access_token: str = None, group: str = None, pair_suffix: str = ''):
         from common.constants import cookies, cookies_str

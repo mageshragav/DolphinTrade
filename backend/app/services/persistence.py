@@ -166,13 +166,15 @@ async def trade_exists(session: AsyncSession, symbol: str, candle_close: str, ac
                        expiry: str, order_type: str = 'binary') -> bool:
     if not candle_close:
         return False
-    # exact signal identity: same candle close time + direction + expiry + market
+    # exact signal identity: same candle close time + direction + expiry +
+    # market; cancelled trades never placed, so they don't count
     q = select(models.Trade.id).where(
         models.Trade.symbol == symbol,
         models.Trade.action == action,
         models.Trade.expiry == expiry,
         models.Trade.candle_close_ts == candle_close,
-        models.Trade.order_type == order_type)
+        models.Trade.order_type == order_type,
+        models.Trade.status != 'cancelled')
     rows = (await session.execute(q)).scalars().all()
     if rows:
         return True
@@ -190,6 +192,7 @@ async def trade_exists(session: AsyncSession, symbol: str, candle_close: str, ac
         models.Trade.action == action,
         models.Trade.expiry == expiry,
         models.Trade.expiry_time >= exp_ts - timedelta(hours=2),
-        models.Trade.expiry_time <= exp_ts + timedelta(hours=2))
+        models.Trade.expiry_time <= exp_ts + timedelta(hours=2),
+        models.Trade.status != 'cancelled')
     rows = (await session.execute(q)).scalars().all()
     return len(rows) > 0

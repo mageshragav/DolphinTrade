@@ -77,6 +77,14 @@ class ExecutionService:
             placed = True
         elif ok:
             try:
+                if mode == 'binary':
+                    # availability pre-check: the digital market runs on a
+                    # schedule - don't even send the order when it's closed
+                    from app.connectors import instruments
+                    tradable, why = instruments.pair_tradable(
+                        d['symbol'].split(':')[-1])
+                    if not tradable:
+                        raise RuntimeError(why)
                 tp = sl = None
                 if mode == 'multiplier':
                     tp, sl = self._build_sl_tp(d, limits)
@@ -89,6 +97,21 @@ class ExecutionService:
                     trade['stake'], duration_sec=duration, order_type=mode,
                     multiplicator=limits.get('multiplicator', 100),
                     take_profit=tp, stop_loss=sl)
+                if isinstance(deal, dict) and deal.get('error'):
+                    # broker rejected this leg (e.g. market closed) - fail it
+                    if mode == 'multiplier' and (tp or sl) and \
+                            'stop' in str(deal.get('code', '')).lower():
+                        # SL/TP too tight for the broker's rules - retry
+                        # without levels (broker applies its own defaults)
+                        LOGGER.info(f'multiplier SL/TP rejected '
+                                    f'({deal.get("code")}) - retrying without levels')
+                        deal = self.connector.place_bet(
+                            d['symbol'], 'up' if d['action'] == 'CALL' else 'down',
+                            trade['stake'], duration_sec=None, order_type=mode,
+                            multiplicator=limits.get('multiplicator', 100),
+                            take_profit=None, stop_loss=None)
+                    if isinstance(deal, dict) and deal.get('error'):
+                        raise RuntimeError(f"{deal.get('code', '')}: {deal['error']}")
                 trade['status'] = 'open'
                 trade['broker_ref'] = str(deal.get('id', '')) if isinstance(deal, dict) else str(deal)
                 if isinstance(deal, dict):

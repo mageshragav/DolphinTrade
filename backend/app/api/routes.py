@@ -111,6 +111,98 @@ async def update_token_api(body: TokenUpdate):
             'msg': 'token updated and verified' if ok else 'token update failed'}
 
 
+@router.get('/instruments')
+async def get_instruments_api():
+    """Live instrument payouts + tradability from the broker websocket."""
+    from app.connectors import instruments
+    ok = instruments.refresh()
+    snap = instruments.snapshot()
+    return {'ok': ok, 'ts': snap['ts'],
+            'profitability': snap['profitability'],
+            'pairs': sorted(p for p, v in snap['profitability'].items()
+                            if v and v >= 50)}
+
+
+@router.get('/accounts')
+async def get_accounts_api():
+    """Broker accounts (demo/real) with balances."""
+    import json as _json
+    import urllib.request
+    from common import constants as const
+    req = urllib.request.Request('https://gw.olymptrade.com/api/accounts/list/v2',
+                                 data=_json.dumps({'with_archive': True}).encode(),
+                                 headers={
+                                     'accept': '*/*', 'content-type': 'application/json',
+                                     'cookie': const.cookies_str,
+                                     'origin': 'https://olymptrade.com',
+                                     'referer': 'https://olymptrade.com/',
+                                     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) '
+                                                   'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                                   'Chrome/151.0.0.0 Safari/537.36',
+                                     'x-cid-app': 'web@OlympTrade@2026.3.2330613@2330613',
+                                     'x-cid-device': '@@desktop',
+                                     'x-cid-os': 'linux@none', 'x-cid-ver': '1'})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = _json.loads(r.read().decode())
+    except Exception as e:
+        return {'ok': False, 'msg': str(e)}
+    accounts = data.get('accounts') if isinstance(data, dict) else data
+    if not isinstance(accounts, list):
+        return {'ok': False, 'msg': 'unexpected response'}
+    out = []
+    for a in accounts:
+        bal = a.get('balance') or {}
+        out.append({
+            'id': a.get('id'), 'name': a.get('name'), 'group': a.get('group'),
+            'type': a.get('type'), 'status': a.get('status'),
+            'currency': a.get('currency'),
+            'balance': bal.get('amount', 0),
+        })
+    return {'ok': True, 'accounts': out}
+
+
+@router.get('/pairs')
+async def get_pairs_api():
+    """Available broker instruments: ftt (fixed-time) and fx (multiplier)."""
+    import json as _json
+    import urllib.request
+    from common import constants as const
+    body = _json.dumps({"list": ["ftt_pairs", "ftt_pairs_default",
+                                  "fx_pairs", "fx_pairs_default"]}).encode()
+    req = urllib.request.Request('https://gw.olymptrade.com/api/user/values/v1',
+                                 data=body, headers={
+                                     'accept': '*/*', 'content-type': 'application/json',
+                                     'cookie': const.cookies_str,
+                                     'origin': 'https://olymptrade.com',
+                                     'referer': 'https://olymptrade.com/',
+                                     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) '
+                                                   'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                                   'Chrome/151.0.0.0 Safari/537.36',
+                                     'x-cid-app': 'web@OlympTrade@2026.3.2330613@2330613',
+                                     'x-cid-device': '@@desktop',
+                                     'x-cid-os': 'linux@none', 'x-cid-ver': '1'})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = _json.loads(r.read().decode())
+    except Exception as e:
+        return {'ok': False, 'msg': str(e)}
+    ftt = [p.get('id') for p in (data.get('ftt_pairs') or [])]
+    fx = [p.get('id') for p in (data.get('fx_pairs') or [])]
+    return {
+        'ok': True,
+        'ftt_default': (data.get('ftt_pairs_default') or {}).get('id'),
+        'fx_default': (data.get('fx_pairs_default') or {}).get('id'),
+        'ftt_currency': sorted(i for i in ftt if len(i) == 6 and i.isupper()
+                               and i not in ('BRZU', 'UVXY', 'AMZN', 'AAPL',
+                                             'BMW', 'KO', 'FCE', 'BA', 'DIS',
+                                             'YM', 'FDAX', 'QID', 'IYR', 'CAT',
+                                             'CVX', 'CSCO', 'DAX', 'EURUSD_OTC')
+                               and not i.endswith('_OTC')),
+        'ftt_count': len(ftt), 'fx_count': len(fx),
+    }
+
+
 @router.post('/monitor/control')
 async def monitor_control(body: StartStop):
     sch = RUNTIME['scheduler']

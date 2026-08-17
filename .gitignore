@@ -49,3 +49,7 @@ scripts/cwe-s4-steps.sh
 backend/dolphin/decision_logs.csv
 backend/dolphin/signals.csv
 backend/dolphin/loggers/
+
+# large broker websocket debug dumps
+websocket data
+websocket buy sell both forex and fixed data

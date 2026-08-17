@@ -113,11 +113,13 @@ async def allowed(session: AsyncSession, symbol: str) -> tuple[bool, str]:
         target = equity * target_pct / 100.0 * tier
         if pnl >= target:
             return False, f'profit target reached (${pnl:.2f} >= ${target:.2f})'
-    # per-symbol cooldown
+    # per-symbol cooldown (only counts trades that actually placed)
     cooldown = limits.get('symbol_cooldown_min', 30)
     recent = await persistence.last_trades(session, n=200)
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown)
     for t in recent:
+        if t.status == 'cancelled':
+            continue
         if t.symbol == symbol and t.ts and t.ts.replace(tzinfo=timezone.utc) >= cutoff:
             return False, f'{symbol} in cooldown ({cooldown} min)'
     return True, 'ok'
