@@ -53,6 +53,8 @@ def default_limits():
         'loss_streak_reduce_after': 3,     # reduce stake after N consecutive losses
         'loss_streak_stake_factor': 0.5,   # stake multiplier per extra loss
         'news_blackout_min': 0,      # veto medium+high news within N min (0 = off)
+        'max_concurrent': 0,         # max simultaneous open trades (0 = unlimited)
+        'max_stake_in_flight_pct': 0.0,   # total stake cap in flight, % of equity (0 = off)
     }
 
 
@@ -143,6 +145,19 @@ async def allowed(session: AsyncSession, symbol: str, combo_key: str | None = No
             continue
         if t.symbol == symbol and t.ts and t.ts.replace(tzinfo=timezone.utc) >= cutoff:
             return False, f'{symbol} in cooldown ({cooldown} min)'
+    # portfolio caps: simultaneous open trades + in-flight stake budget
+    max_conc = int(limits.get('max_concurrent', 0) or 0)
+    if max_conc > 0:
+        open_n = await persistence.open_trades_count(session)
+        if open_n >= max_conc:
+            return False, f'max concurrent trades reached ({open_n}/{max_conc})'
+    inflight_pct = float(limits.get('max_stake_in_flight_pct', 0.0) or 0.0)
+    if inflight_pct > 0:
+        budget = equity * inflight_pct / 100.0
+        inflight = await persistence.inflight_stake(session)
+        if inflight >= budget:
+            return False, (f'in-flight stake budget exhausted '
+                           f'(${inflight:.2f} >= ${budget:.2f})')
     return True, 'ok'
 
 
@@ -161,16 +176,27 @@ async def loss_streak(session: AsyncSession, max_scan: int = 50) -> int:
 
 
 async def stake_for(session: AsyncSession, base_stake: float, limits: dict) -> float:
-    """Loss-streak stake reduction (EA AutoMarti DecreaseFactor idea)."""
+    """Loss-streak stake reduction (EA AutoMarti DecreaseFactor idea) + a
+    volatility-budget floor: never commit more than the in-flight budget
+    allows for this leg."""
     factor = limits.get('loss_streak_stake_factor', 0.5)
     after = limits.get('loss_streak_reduce_after', 0)
-    if not factor or not after:
-        return base_stake
-    streak = await loss_streak(session)
-    if streak < after:
-        return base_stake
-    mult = factor ** min(streak - after + 1, 3)
-    return round(base_stake * mult, 2)
+    stake = base_stake
+    if factor and after:
+        streak = await loss_streak(session)
+        if streak >= after:
+            mult = factor ** min(streak - after + 1, 3)
+            stake = round(base_stake * mult, 2)
+    inflight_pct = float(limits.get('max_stake_in_flight_pct', 0.0) or 0.0)
+    if inflight_pct > 0:
+        budget = float(limits.get('equity', 1000.0)) * inflight_pct / 100.0
+        inflight = await persistence.inflight_stake(session)
+        remaining = budget - inflight
+        if remaining <= 0:
+            return round(stake, 2)          # allowed() already blocks; floor only
+        stake = min(stake, round(remaining, 2))
+        stake = max(1.0, stake)             # never a zero-stake order
+    return round(stake, 2)
 
 
 async def circuit_breaker_status(session: AsyncSession) -> dict:

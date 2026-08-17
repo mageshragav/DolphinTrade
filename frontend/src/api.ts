@@ -28,6 +28,7 @@ export interface MonitorStatus {
   theta: number; combos: string; hours_window: string; pairs: string;
   equity: number; stake_pct: number; model_count: number; news_events: number;
   token_ok?: boolean; token_expires_at?: string | null;
+  regime?: string;
 }
 
 export interface AgentsStatus {
@@ -44,6 +45,7 @@ export interface Settings {
   hw_stop_pct: number; daily_profit_target_pct: number;
   loss_streak_reduce_after: number; loss_streak_stake_factor: number;
   news_blackout_min: number;
+  max_concurrent: number; max_stake_in_flight_pct: number;
   hourly_floor: number; hourly_floor_min: number;
   theta: number; combos: string; hours_window: string; pairs: string;
   hourly_guarantee: boolean; hourly_minute: number;

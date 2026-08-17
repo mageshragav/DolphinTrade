@@ -101,6 +101,19 @@ async def trades_today(session: AsyncSession) -> int:
     return (await session.execute(q)).scalar() or 0
 
 
+async def open_trades_count(session: AsyncSession) -> int:
+    """Currently open (unsettled) trades across all symbols/markets."""
+    q = select(func.count(models.Trade.id)).where(models.Trade.status == 'open')
+    return (await session.execute(q)).scalar() or 0
+
+
+async def inflight_stake(session: AsyncSession) -> float:
+    """Total stake currently committed to open trades."""
+    q = select(func.coalesce(func.sum(models.Trade.stake), 0.0)).where(
+        models.Trade.status == 'open')
+    return float((await session.execute(q)).scalar() or 0.0)
+
+
 async def trades_in_hour(session: AsyncSession, hour_key: str) -> int:
     """Non-cancelled trades whose UTC hour matches 'YYYYMMDDHH'."""
     try:

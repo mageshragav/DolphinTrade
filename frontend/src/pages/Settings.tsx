@@ -128,6 +128,12 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
             <div className="cfg-row"><label>News blackout</label>
               <input {...f('news_blackout_min')} style={{ width: 56 }} />
               <span className="hint">0 = off; veto med+high news ±min</span></div>
+            <div className="cfg-row"><label>Max concurrent</label>
+              <input {...f('max_concurrent')} style={{ width: 56 }} />
+              <span className="hint">0 = unlimited; simultaneous open trades</span></div>
+            <div className="cfg-row"><label>In-flight stake %</label>
+              <input {...f('max_stake_in_flight_pct')} style={{ width: 56 }} />
+              <span className="hint">0 = off; total open-stake cap of equity</span></div>
             <div className="cfg-row"><label>Stake %</label><input {...f('stake_pct')} style={{ width: 56 }} /></div>
             <div className="cfg-row"><label>Equity</label><input {...f('equity')} style={{ width: 70 }} /></div>
           </>}
@@ -152,6 +158,8 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
             loss_streak_reduce_after: Number(form.loss_streak_reduce_after) || 0,
             loss_streak_stake_factor: Number(form.loss_streak_stake_factor) || 0.5,
             news_blackout_min: Number(form.news_blackout_min) || 0,
+            max_concurrent: Number(form.max_concurrent) || 0,
+            max_stake_in_flight_pct: Number(form.max_stake_in_flight_pct) || 0,
             hourly_floor: Number(form.hourly_floor) || 0.58,
             hourly_floor_min: Number(form.hourly_floor_min) || 0.55,
             hourly_guarantee: !!form.hourly_guarantee,

@@ -37,11 +37,27 @@ class TradingRuntime:
         if candles is None or candles.empty:
             return
         from app.trading.scheduler import parse_combos
+        from app.services import regime as regime_svc
         settings = get_settings()
         combos = self.combos or parse_combos(settings.combos)
 
+        # regime-aware gate: modulate theta by the current market regime and
+        # broadcast when it flips so the operator sees why the gate moved
+        reg = regime_svc.classify(candles)
+        eff_theta = regime_svc.effective_theta(
+            self.ml.theta if hasattr(self.ml, 'theta') else settings.theta,
+            reg['theta_delta'])
+        if getattr(self, '_last_regime', None) != reg['regime']:
+            self._last_regime = reg['regime']
+            await ws.broadcast({'type': 'agent',
+                                'line': f'regime: {reg["regime"]} '
+                                        f'(θ {settings.theta:.2f} '
+                                        f'{"+" if reg["theta_delta"] >= 0 else ""}'
+                                        f'{reg["theta_delta"]:.2f} -> {eff_theta:.2f})',
+                                'ts': datetime.now(timezone.utc).timestamp()})
+
         # 1. market candidates (one heavy feature/ML pass)
-        decisions = self.ml.decide_all(candles, combos=combos)
+        decisions = self.ml.decide_all(candles, combos=combos, theta=eff_theta)
         candidates = {}
         for d in decisions:
             candidates[(d['symbol'], d['tf'], d['expiry'])] = d

@@ -1045,6 +1045,54 @@ async def test_enable_combo_restores_trading():
         assert 'disabled' not in why
 
 
+async def test_max_concurrent_blocks_new_trades():
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'trade_mode': 'live', 'dry_run': False,
+                                  'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0,
+                                  'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary'],
+                                  'max_concurrent': 2})
+        # 2 open trades already in flight
+        for i in range(2):
+            await persistence.record_trade(s, {
+                'symbol': f'FX:EURUSD', 'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+                'entry': 1.08, 'stake': 10.0, 'dry_run': False, 'status': 'open',
+                'expiry_time': None, 'candle_close_ts': f'2026-08-12 14:{i:02d}:00'})
+        ok, why = await risk.allowed(s, 'FX:GBPUSD', combo_key='5m->15m')
+        assert ok is False and 'concurrent' in why
+        # settled trades don't count
+        await persistence.update_trade(s, 1, status='expired', result='WIN')
+        ok2, why2 = await risk.allowed(s, 'FX:GBPUSD', combo_key='5m->15m')
+        assert ok2 is True
+
+
+async def test_inflight_stake_budget_blocks_and_floors():
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'trade_mode': 'live', 'dry_run': False,
+                                  'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0,
+                                  'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary'],
+                                  'max_stake_in_flight_pct': 1.0})  # $10 budget
+        await persistence.record_trade(s, {
+            'symbol': 'FX:EURUSD', 'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+            'entry': 1.08, 'stake': 9.0, 'dry_run': False, 'status': 'open',
+            'expiry_time': None, 'candle_close_ts': '2026-08-12 15:00:00'})
+        # only $1 of the $10 budget remains -> stake floored to $1
+        stake = await risk.stake_for(s, 10.0, await risk.get_limits(s))
+        assert stake == 1.0
+        # a second open trade pushing past the budget is blocked
+        await persistence.record_trade(s, {
+            'symbol': 'FX:GBPUSD', 'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+            'entry': 1.08, 'stake': 1.0, 'dry_run': False, 'status': 'open',
+            'expiry_time': None, 'candle_close_ts': '2026-08-12 15:05:00'})
+        ok, why = await risk.allowed(s, 'FX:USDJPY', combo_key='5m->15m')
+        assert ok is False and 'budget' in why
+
+
 async def test_analytics_aggregations():
     from app.services import analytics
     async with SessionLocal() as s:

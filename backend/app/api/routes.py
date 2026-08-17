@@ -89,6 +89,8 @@ async def monitor_status(session: AsyncSession = Depends(get_db)):
         'token_expires_at': str(token_expiry()) if token_expiry() else None,
         'drift': drift,
         'disabled_combos': await risk_svc.disabled_combos(session),
+        'regime': getattr(RUNTIME['runtime'], '_last_regime', 'unknown')
+        if RUNTIME['runtime'] else 'unknown',
     }
 
 
@@ -565,6 +567,8 @@ class SettingsUpdate(BaseModel):
     loss_streak_reduce_after: int | None = None
     loss_streak_stake_factor: float | None = None
     news_blackout_min: int | None = None
+    max_concurrent: int | None = None
+    max_stake_in_flight_pct: float | None = None
     theta: float | None = None
     combos: str | None = None
     hours_window: str | None = None
@@ -594,6 +598,8 @@ async def get_settings_api(session: AsyncSession = Depends(get_db)):
         'loss_streak_reduce_after': limits.get('loss_streak_reduce_after', 3),
         'loss_streak_stake_factor': limits.get('loss_streak_stake_factor', 0.5),
         'news_blackout_min': limits.get('news_blackout_min', 0),
+        'max_concurrent': limits.get('max_concurrent', 0),
+        'max_stake_in_flight_pct': limits.get('max_stake_in_flight_pct', 0.0),
         'hourly_floor': limits.get('hourly_floor', 0.58),
         'hourly_floor_min': limits.get('hourly_floor_min', 0.55),
         'theta': s.theta, 'combos': s.combos, 'hours_window': s.hours_window, 'pairs': s.pairs,
@@ -609,7 +615,8 @@ async def update_settings_api(body: SettingsUpdate, session: AsyncSession = Depe
               'atr_sl_mult', 'atr_tp_mult', 'hw_stop_pct', 'hourly_floor',
               'hourly_floor_min',
               'daily_profit_target_pct', 'loss_streak_reduce_after',
-              'loss_streak_stake_factor', 'news_blackout_min']:
+              'loss_streak_stake_factor', 'news_blackout_min',
+              'max_concurrent', 'max_stake_in_flight_pct']:
         v = getattr(body, f)
         if v is not None:
             limits[f] = v

@@ -106,6 +106,11 @@ export default function App() {
           <span className={`pill ${status?.kill_switch ? 'kill' : ''}`}>
             {status?.kill_switch ? 'KILL SWITCH' : status?.dry_run ? 'DRY RUN' : 'LIVE'}
           </span>
+          {status?.regime && (
+            <span className="pill" style={{ background: '#1b2530', color: 'var(--blue)', border: '1px solid var(--border)' }}>
+              regime: {status.regime}
+            </span>
+          )}
           <span className="dot" style={{ background: connected ? 'var(--green)' : 'var(--red)' }}
             title={connected ? 'socket connected' : 'socket disconnected'} />
           <div className="meta">
