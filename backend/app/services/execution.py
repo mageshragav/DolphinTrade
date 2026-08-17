@@ -158,7 +158,8 @@ class ExecutionService:
         dry_run = limits.get('dry_run', True)
         trade_mode = limits.get('trade_mode', 'dry')
         shadow = trade_mode == 'shadow'
-        ok, why = await risk.allowed(session, d['symbol'])
+        ok, why = await risk.allowed(session, d['symbol'],
+                                     combo_key=risk.combo_key(d))
 
         # per-mode idempotency: the same signal may trade both markets, but
         # each market only once

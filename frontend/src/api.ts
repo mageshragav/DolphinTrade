@@ -106,6 +106,24 @@ export interface BacktestResult {
   equity_curve: { ts?: string; symbol: string; pnl: number; equity: number }[]
 }
 
+export interface ComboHealth {
+  benchmark: Record<string, { win_rate: number; trades: number }>
+  disabled: Record<string, { disabled_at: number; reason: string; benchmark: number;
+                             live_wr: number; drift_pts: number }>
+  live: Record<string, { sample: number; win_rate: number; benchmark: number;
+                         drift_pts: number; status: string }>
+}
+
+export interface ModelRegistryItem {
+  id: number; combo: string; version: number; status: string;
+  model_path: string; created_at?: string | null;
+  metrics: { rows?: number; test_rows?: number; train_acc?: number;
+             val_trades?: number; val_win_rate?: number | null;
+             trained_at?: string;
+             validation?: { verdict?: string; champion?: Record<string, unknown>;
+                            challenger?: Record<string, unknown> } }
+}
+
 const API = ''
 
 export async function get<T>(path: string): Promise<T> {

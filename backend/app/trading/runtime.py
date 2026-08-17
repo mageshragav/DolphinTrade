@@ -151,7 +151,8 @@ class TradingRuntime:
                          and (d.get('ev_score') or 0.0) > 0.0]
                 cands.sort(key=lambda d: d.get('ev_score') or 0.0, reverse=True)
                 for d in cands:
-                    ok, why = await risk_svc.allowed(session, d['symbol'])
+                    ok, why = await risk_svc.allowed(session, d['symbol'],
+                                                     combo_key=risk_svc.combo_key(d))
                     if ok:
                         picked, used_tier = d, tier
                         break

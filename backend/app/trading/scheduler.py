@@ -56,6 +56,7 @@ class Scheduler:
         self._last_refresh_attempt = 0.0    # epoch of last auto-refresh launch
         self._last_drift_check = 0.0        # epoch of last drift monitor run
         self._last_report_day = ''         # last UTC day the daily report ran
+        self._last_retrain = 0.0           # epoch of last champion/challenger retrain
 
     async def _auto_refresh_token(self, force=False):
         """Launch the headless auto-login (fire and forget) when the session
@@ -182,10 +183,49 @@ class Scheduler:
                 LOGGER.warning(f'daily report send failed: {e}')
         return {'sent': False}
 
+    async def _retrain_models(self):
+        """Weekly champion/challenger retrain from the candle archive.
+        Heavy (training + backtest validation per combo) - runs as its own
+        task so the trading cycle is never blocked."""
+        from app.runtime_ctx import RUNTIME
+        from app.services import model_registry, persistence
+        combos = parse_combos(get_settings().combos)
+        results = []
+        async with SessionLocal() as session:
+            for bar_sec, exp_sec in combos:
+                try:
+                    r = await model_registry.retrain_challenger(
+                        session, (bar_sec, exp_sec), window_days=7,
+                        auto_promote=True)
+                    results.append(r)
+                except Exception as e:
+                    LOGGER.warning(f'retrain {bar_sec}_{exp_sec} failed: {e}')
+            await persistence.record_agent_event(
+                session, 'system', 'weekly model retrain', None,
+                {'results': results})
+        promoted = [r for r in results if r.get('promoted')]
+        bot = RUNTIME.get('telegram')
+        if bot and results:
+            lines = [f'🧬 Model retrain: {len(results)} combos']
+            for r in results:
+                v = r.get('validation', {})
+                lines.append(f'{r["combo"]} v{r.get("version")}: verdict '
+                             f'{v.get("verdict")} (champ WR {v.get("champion", {}).get("win_rate")} '
+                             f'vs challenger {v.get("challenger", {}).get("win_rate")})')
+            if promoted:
+                lines.append('⬆ PROMOTED: ' + ', '.join(r['combo'] for r in promoted))
+            try:
+                bot.send('\n'.join(lines))
+            except Exception:
+                pass
+        return results
+
     async def _check_drift(self):
-        """Hourly drift check: rolling live win rate vs benchmark -> alert."""
+        """Hourly drift check: rolling live win rate vs benchmark -> alert.
+        Also auto-disables combos that stay below their per-combo benchmark."""
         from app.runtime_ctx import RUNTIME
         from app.services import persistence
+        alerts = []
         async with SessionLocal() as session:
             state = await risk_svc.drift_monitor(session)
             if state.get('alert') and not state.get('alerted'):
@@ -199,18 +239,29 @@ class Scheduler:
                                                f'{state["win_rate"]} vs benchmark '
                                                f'{state["projected"]} (below '
                                                f'{state.get("threshold")})'})
-        if state.get('alert') and not state.get('alerted'):
+                alerts.append(f'⚠️ DRIFT ALERT: live win rate '
+                              f'{state["win_rate"]} vs benchmark '
+                              f'{state["projected"]} over {state["sample"]} trades - '
+                              f'performance is degrading.')
+            for cd in state.get('combo_disables', []):
+                await persistence.record_agent_event(
+                    session, 'drift', f'combo disabled: {cd["combo"]}', None, cd)
+                await ws.broadcast({'type': 'alert',
+                                    'message': f'COMBO DISABLED: {cd["combo"]} '
+                                               f'({cd["drift_pts"]} pts below '
+                                               f'benchmark {cd["benchmark"]})'})
+                alerts.append(f'⛔ COMBO DISABLED: {cd["combo"]} live '
+                              f'{cd["live_wr"]} vs benchmark {cd["benchmark"]} '
+                              f'({cd["drift_pts"]} pts below) - no new trades on '
+                              f'this combo until it recovers.')
+        if alerts:
             bot = RUNTIME.get('telegram')
             if bot:
                 try:
-                    bot.send(f'⚠️ DRIFT ALERT: live win rate '
-                             f'{state["win_rate"]} vs benchmark '
-                             f'{state["projected"]} over {state["sample"]} trades - '
-                             f'performance is degrading. Review settings or pause.')
+                    bot.send('\n'.join(alerts))
                 except Exception:
                     pass
-            LOGGER.warning(f'drift alert: win_rate={state["win_rate"]} '
-                           f'vs benchmark={state["projected"]}')
+            LOGGER.warning('; '.join(alerts))
         return state
 
     async def run(self):
@@ -244,6 +295,13 @@ class Scheduler:
                     await self._nightly_report()
                 except Exception as e:
                     LOGGER.warning(f'nightly report failed: {e}')
+            # weekly champion/challenger retrain (fire-and-forget task)
+            if now - self._last_retrain > 7 * 86400:
+                self._last_retrain = now
+                try:
+                    asyncio.create_task(self._retrain_models())
+                except Exception as e:
+                    LOGGER.warning(f'retrain launch failed: {e}')
             # hourly minimum-signal guarantee: once per hour at :minute, if
             # the hour has no trade, pick the best candidate above the floor
             hh = datetime.now(timezone.utc)

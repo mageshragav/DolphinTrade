@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AnalyticsData, BacktestResult, ShadowData } from '../api'
+import type { AnalyticsData, BacktestResult, ComboHealth, ModelRegistryItem, ShadowData } from '../api'
 import { get, post } from '../api'
 import { Card, Stat, Empty } from '../components/ui'
 
@@ -69,9 +69,54 @@ function LedgerCard({ title, g }: { title: string; g: { trades: number; settled:
 export function AnalyticsPage({ analytics, shadow }: {
   analytics: AnalyticsData | null; shadow: ShadowData | null
 }) {
+  const [comboHealth, setComboHealth] = useState<ComboHealth | null>(null)
+  const [models, setModels] = useState<ModelRegistryItem[]>([])
+  const [retrainBusy, setRetrainBusy] = useState(false)
+  const [retrainMsg, setRetrainMsg] = useState('')
   const [bt, setBt] = useState<{ theta: string; days: string; orderTypes: ('binary' | 'multiplier')[]; busy: boolean; result: BacktestResult | null; err: string }>({
     theta: '0.60', days: '5', orderTypes: ['binary'], busy: false, result: null, err: '',
   })
+
+  const loadComboHealth = async () => {
+    try { setComboHealth(await get<ComboHealth>('/api/combos/benchmarks')) } catch { /* ignore */ }
+  }
+  const loadModels = async () => {
+    try {
+      const r = await get<{ ok: boolean; models: ModelRegistryItem[] }>('/api/models')
+      setModels(r.models)
+    } catch { /* ignore */ }
+  }
+  useEffect(() => {
+    loadComboHealth(); loadModels()
+    const t = setInterval(() => { loadComboHealth(); loadModels() }, 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  const enableCombo = async (combo: string) => {
+    await post('/api/combos/enable', { combo })
+    loadComboHealth()
+  }
+
+  const actOnModel = async (action: 'promote' | 'rollback', m: ModelRegistryItem) => {
+    await post(`/api/models/${action}`, action === 'promote'
+      ? { combo: m.combo, model_id: m.id } : { combo: m.combo, version: m.version })
+    loadModels()
+  }
+
+  const retrainNow = async () => {
+    setRetrainBusy(true); setRetrainMsg('training challengers (minutes)...')
+    try {
+      const r = await post<{ ok: boolean; results: { combo: string; version: number;
+        promoted?: boolean; msg?: string; validation?: { verdict?: string } }[] }>(
+        '/api/models/retrain', { auto_promote: true })
+      setRetrainMsg(r.ok ? `done - ${r.results.map(x => `${x.combo} v${x.version} (${x.validation?.verdict ?? x.msg ?? '?'})${x.promoted ? ' ⬆' : ''}`).join(', ')}` : 'failed')
+      loadModels()
+    } catch (e) {
+      setRetrainMsg(`error: ${e}`)
+    } finally {
+      setRetrainBusy(false)
+    }
+  }
 
   const runBacktest = async () => {
     setBt(b => ({ ...b, busy: true, err: '', result: null }))
@@ -143,6 +188,36 @@ export function AnalyticsPage({ analytics, shadow }: {
               the honest "what if" ledger to compare against live results.</div>
           </>}
         </Card>
+
+        <Card title="Combo health" count={comboHealth ? Object.keys(comboHealth.benchmark).length : 0}>
+          {!comboHealth && <Empty text="Run a backtest (>=20 settled trades) to seed per-combo benchmarks." />}
+          {comboHealth && Object.entries(comboHealth.benchmark).length === 0 &&
+            <Empty text="No per-combo benchmarks yet - run a backtest to seed them." />}
+          {comboHealth && Object.entries(comboHealth.benchmark).map(([combo, b]) => {
+            const live = comboHealth.live[combo]
+            const dis = comboHealth.disabled[combo]
+            const wr = live?.win_rate
+            const bad = wr != null && b.win_rate - wr > 0.05
+            return (
+              <div key={combo} className="ag">
+                <span style={{ fontWeight: 700 }}>{combo}</span>
+                <span>bench <b>{pct(b.win_rate)}</b> · live {wr != null ? pct(wr) : '--'}</span>
+                {dis ? (
+                  <button className="stop" style={{ padding: '2px 10px', fontSize: 11 }}
+                    onClick={() => enableCombo(combo)}>re-enable</button>
+                ) : (
+                  <span className={`chip ${bad ? 'bearish' : 'ok'}`}
+                    style={bad ? undefined : { background: '#0e2a1c', color: 'var(--green)' }}>
+                    {bad ? 'below' : 'ok'}</span>
+                )}
+              </div>
+            )
+          })}
+          {comboHealth && Object.keys(comboHealth.disabled).length > 0 && (
+            <div className="hint">Disabled combos are auto-blocked by the drift monitor until they
+              recover or you re-enable them (Telegram is alerted on each disable).</div>
+          )}
+        </Card>
       </div>
 
       <div>
@@ -208,6 +283,44 @@ export function AnalyticsPage({ analytics, shadow }: {
           })()}
           <div className="hint">Replays archived candles through the live ML pipeline (no broker).
             ≥20 settled trades auto-saves the result as the drift benchmark.</div>
+        </Card>
+
+        <Card title="Model registry (champion/challenger)" count={models.length}
+          extra={<button style={{ padding: '2px 10px', fontSize: 11 }}
+            onClick={retrainNow} disabled={retrainBusy}>
+            {retrainBusy ? 'Training...' : 'Retrain now'}</button>}>
+          {models.length === 0 &&
+            <Empty text="No trained challengers yet. 'Retrain now' trains + walk-forward validates each combo from the candle archive." />}
+          {models.map(m => {
+            const mt = m.metrics
+            const verdict = mt.validation?.verdict
+            const ch = mt.validation?.champion as Record<string, unknown> | undefined
+            const cl = mt.validation?.challenger as Record<string, unknown> | undefined
+            return (
+              <div key={m.id} className="ag" style={{ alignItems: 'flex-start' }}>
+                <span>
+                  <b>{m.combo}</b> <span className="chip"
+                    style={m.status === 'champion'
+                      ? { background: '#0e2a1c', color: 'var(--green)' }
+                      : { background: '#1b2530', color: 'var(--dim)' }}>
+                    {m.status}</span>
+                  <div className="hint" style={{ margin: 0 }}>
+                    v{m.version} · rows {mt.rows ?? '-'} · val WR {mt.val_win_rate != null ? pct(mt.val_win_rate) : '--'}
+                    {verdict && ` · verdict ${verdict}`}
+                    {verdict && ch && ` (ch ${(ch.win_rate as number) ?? '--'} vs chl ${(cl?.win_rate as number) ?? '--'})`}
+                  </div>
+                </span>
+                {m.status !== 'champion' ? (
+                  <button style={{ padding: '2px 10px', fontSize: 11 }}
+                    onClick={() => actOnModel('promote', m)}>promote</button>
+                ) : (
+                  <button style={{ padding: '2px 10px', fontSize: 11 }}
+                    onClick={() => actOnModel('rollback', m)}>rollback</button>
+                )}
+              </div>
+            )
+          })}
+          {retrainMsg && <div className="hint">{retrainMsg}</div>}
         </Card>
       </div>
     </div>

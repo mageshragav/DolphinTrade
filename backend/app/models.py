@@ -128,3 +128,23 @@ class Candle(Base):
     low: Mapped[float] = mapped_column(Float, nullable=True)
     close: Mapped[float] = mapped_column(Float, nullable=True)
     volume: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class ModelVersion(Base):
+    """Champion/challenger model registry (one row per trained bundle version).
+
+    status: champion | candidate | retired. The live pipeline loads the
+    champion bundle for each combo when one is registered, otherwise it falls
+    back to the bundled static models.
+    """
+
+    __tablename__ = 'model_registry'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    combo: Mapped[str] = mapped_column(String(24), index=True)   # '300_900' (bar_sec_expiry)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(12), default='candidate', index=True)
+    model_path: Mapped[str] = mapped_column(String(200), default='')
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (UniqueConstraint('combo', 'version', name='uq_model_combo_version'),)

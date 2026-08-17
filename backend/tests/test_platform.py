@@ -994,6 +994,57 @@ async def test_drift_alert_respects_cooldown():
         assert float(stored or 0) > 0
 
 
+async def test_per_combo_disable_and_gate():
+    from app.services import risk as risk_svc
+    async with SessionLocal() as s:
+        # benchmark: 5m->15m should win 70% (from backtest)
+        await risk_svc.save_combo_benchmark(s, {'5m->15m': {'win_rate': 0.70,
+                                                            'settled': 40}})
+        # 20 settled live trades on that combo, all losses -> far below
+        for i in range(20):
+            await persistence.record_trade(s, {
+                'symbol': 'FX:EURUSD', 'tf': '5m', 'expiry': '15m',
+                'action': 'CALL', 'entry': 1.08, 'stake': 10.0, 'dry_run': False,
+                'status': 'expired', 'result': 'LOSS',
+                'expiry_time': None, 'candle_close_ts': f'2026-08-12 12:{i:02d}:00'})
+        state = await risk_svc.drift_monitor(s)
+        disables = state.get('combo_disables', [])
+        assert any(c['combo'] == '5m->15m' for c in disables)
+        # the gate now blocks the disabled combo (live mode so the gate is
+        # actually reached, not just dry-run)
+        await risk.set_limits(s, {'trade_mode': 'live', 'dry_run': False,
+                                  'max_trades_per_day': 14,
+                                  'max_daily_loss_pct': 5.0,
+                                  'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary']})
+        ok, why = await risk_svc.allowed(s, 'FX:EURUSD', combo_key='5m->15m')
+        assert ok is False and 'disabled' in why
+        # but a healthy combo is not blocked by the combo gate (it may still
+        # hit another limit - here the daily trade limit from the 20 losses)
+        ok2, why2 = await risk_svc.allowed(s, 'FX:EURUSD', combo_key='15m->1h')
+        assert 'disabled' not in why2
+
+
+async def test_enable_combo_restores_trading():
+    from app.services import risk as risk_svc
+    async with SessionLocal() as s:
+        await risk_svc.save_combo_benchmark(s, {'5m->15m': {'win_rate': 0.7,
+                                                            'settled': 40}})
+        for i in range(20):
+            await persistence.record_trade(s, {
+                'symbol': 'FX:EURUSD', 'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+                'entry': 1.08, 'stake': 10.0, 'dry_run': False, 'status': 'expired',
+                'result': 'LOSS', 'expiry_time': None,
+                'candle_close_ts': f'2026-08-12 13:{i:02d}:00'})
+        await risk_svc.drift_monitor(s)
+        assert await risk_svc.is_combo_disabled(s, '5m->15m')
+        assert await risk_svc.enable_combo(s, '5m->15m')
+        assert not await risk_svc.is_combo_disabled(s, '5m->15m')
+        ok, why = await risk_svc.allowed(s, 'FX:EURUSD', combo_key='5m->15m')
+        assert 'disabled' not in why
+
+
 async def test_analytics_aggregations():
     from app.services import analytics
     async with SessionLocal() as s:

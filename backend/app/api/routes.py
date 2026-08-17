@@ -88,6 +88,7 @@ async def monitor_status(session: AsyncSession = Depends(get_db)):
         'token_ok': token_ok(),
         'token_expires_at': str(token_expiry()) if token_expiry() else None,
         'drift': drift,
+        'disabled_combos': await risk_svc.disabled_combos(session),
     }
 
 
@@ -178,12 +179,14 @@ async def backtest_run(body: BacktestRequest, session: AsyncSession = Depends(ge
     result = await asyncio.to_thread(run_backtest_sync, ml, candles, **kwargs)
     result['ok'] = True
     # auto-save the benchmark for the drift monitor when the sample is large
-    # enough to be meaningful (>= 20 settled trades)
+    # enough to be meaningful (>= 20 settled trades). Also save per-combo
+    # win rates so the bot can auto-disable underperforming combos.
     summary = result.get('summary', {})
     if summary.get('settled', 0) >= 20:
         await risk_svc.set_benchmark(
             session, summary['win_rate'] or 0.6, 'backtest',
             trades=summary['settled'])
+        await risk_svc.save_combo_benchmark(session, result.get('by_combo', {}))
         result['benchmark_saved'] = True
     return result
 
@@ -331,6 +334,85 @@ async def demo_seed(session: AsyncSession = Depends(get_db)):
             'dry_run': True, 'stake': stake, 'reason': 'demo seed',
         })
     return {'ok': True, 'seeded': len(samples)}
+
+
+@router.get('/combos/benchmarks')
+async def combo_benchmarks_api(session: AsyncSession = Depends(get_db)):
+    """Per-combo backtest benchmarks + live rolling drift (for the UI)."""
+    bench = await persistence.get_setting(session, risk_svc.KEY_COMBO_BENCHMARK, {})
+    disabled = await risk_svc.disabled_combos(session)
+    live = await risk_svc.per_combo_drift(session)
+    return {'benchmark': bench if isinstance(bench, dict) else {},
+            'disabled': disabled,
+            'live': live}
+
+
+class ComboEnable(BaseModel):
+    combo: str
+
+
+@router.post('/combos/enable')
+async def combo_enable_api(body: ComboEnable, session: AsyncSession = Depends(get_db)):
+    ok = await risk_svc.enable_combo(session, body.combo)
+    return {'ok': ok, 'combo': body.combo}
+
+
+# ---------------------------------------------------------------------------
+# model registry (champion/challenger)
+# ---------------------------------------------------------------------------
+
+@router.get('/models')
+async def models_list(combo: str | None = None,
+                      session: AsyncSession = Depends(get_db)):
+    from app.services import model_registry
+    return {'ok': True, 'models': await model_registry.list_models(session, combo)}
+
+
+class ModelAction(BaseModel):
+    combo: str
+    version: int | None = None
+    model_id: int | None = None
+
+
+@router.post('/models/promote')
+async def models_promote(body: ModelAction, session: AsyncSession = Depends(get_db)):
+    from app.services import model_registry
+    return await model_registry.promote(session, body.combo, version=body.version,
+                                        model_id=body.model_id)
+
+
+@router.post('/models/rollback')
+async def models_rollback(body: ModelAction, session: AsyncSession = Depends(get_db)):
+    from app.services import model_registry
+    return await model_registry.promote(session, body.combo, version=body.version)
+
+
+class RetrainRequest(BaseModel):
+    combos: str | None = None            # '300_900,300_1800' (defaults to settings)
+    window_days: int | None = None
+    auto_promote: bool = True
+
+
+@router.post('/models/retrain')
+async def models_retrain(body: RetrainRequest, session: AsyncSession = Depends(get_db)):
+    """Train + walk-forward validate a challenger per combo. Can take minutes
+    (heavy training + backtest validation) - runs in a worker thread."""
+    import asyncio
+    from app.services import model_registry
+    from app.trading.scheduler import parse_combos
+
+    if body.combos:
+        combos = [(int(b), int(e)) for b, e in
+                  (x.split('_') for x in body.combos.split(',')) if '_' in x]
+    else:
+        combos = parse_combos(get_settings().combos)
+    out = []
+    for combo in combos:
+        res = await model_registry.retrain_challenger(
+            session, combo, window_days=body.window_days or 7,
+            auto_promote=body.auto_promote)
+        out.append(res)
+    return {'ok': True, 'results': out}
 
 
 @router.get('/analytics')

@@ -20,11 +20,16 @@ KEY_DRIFT = 'drift_stats'
 KEY_PEAK = 'equity_peak'
 KEY_BENCHMARK = 'benchmark_stats'
 KEY_DRIFT_ALERT = 'drift_alert'
+KEY_COMBO_BENCHMARK = 'combo_benchmark'
+KEY_DISABLED = 'disabled_combos'
 
 DEFAULT_BENCHMARK = 0.65        # expected win rate before a backtest benchmark
 DRIFT_ALERT_PTS = 5.0           # alert when rolling live WR < benchmark - 5 pts
 DRIFT_MIN_TRADES = 20           # min settled trades before judging
 DRIFT_ALERT_COOLDOWN_H = 6.0    # don't re-alert more than once per 6h
+COMBO_DRIFT_PTS = 5.0           # per-combo disable threshold (pts below bench)
+COMBO_MIN_TRADES = 20           # min settled trades per combo before judging
+COMBO_RE_EVALUATE_H = 24.0      # auto re-enable window for a disabled combo
 
 
 def default_limits():
@@ -92,13 +97,16 @@ async def set_kill_switch(session: AsyncSession, on: bool):
     return on
 
 
-async def allowed(session: AsyncSession, symbol: str) -> tuple[bool, str]:
+async def allowed(session: AsyncSession, symbol: str, combo_key: str | None = None,
+                  order_type: str | None = None) -> tuple[bool, str]:
     """Check every guardrail for a potential new trade."""
     if await kill_switch(session):
         return False, 'kill-switch is ON'
     limits = await get_limits(session)
     if limits.get('dry_run'):
         return False, 'dry-run mode'
+    if combo_key and combo_key in (await disabled_combos(session)):
+        return False, f'combo {combo_key} disabled by drift monitor'
     trades = await persistence.trades_today(session)
     if trades >= limits.get('max_trades_per_day', 10):
         return False, f'daily trade limit reached ({trades})'
@@ -202,11 +210,119 @@ async def set_benchmark(session: AsyncSession, win_rate: float, source: str,
         'ts': str(datetime.now(timezone.utc)), 'trades': int(trades)})
 
 
+async def save_combo_benchmark(session: AsyncSession, by_combo: dict):
+    """Persist per-combo win rates from a backtest (keys like '5m->15m')."""
+    out = {}
+    for key, g in (by_combo or {}).items():
+        wr = g.get('win_rate')
+        if wr is not None and g.get('settled', 0) >= 10:
+            out[key] = {'win_rate': round(float(wr), 4), 'trades': g['settled']}
+    if out:
+        await persistence.set_setting(session, KEY_COMBO_BENCHMARK, out)
+    return out
+
+
+def combo_key(d: dict) -> str:
+    return f"{d.get('tf', '5m')}->{d.get('expiry', '15m')}"
+
+
+async def disabled_combos(session: AsyncSession) -> dict:
+    d = await persistence.get_setting(session, KEY_DISABLED, {})
+    return d if isinstance(d, dict) else {}
+
+
+async def is_combo_disabled(session: AsyncSession, key: str) -> bool:
+    return key in (await disabled_combos(session))
+
+
+async def enable_combo(session: AsyncSession, key: str) -> bool:
+    d = await disabled_combos(session)
+    if key in d:
+        d.pop(key)
+        await persistence.set_setting(session, KEY_DISABLED, d)
+        return True
+    return False
+
+
+async def per_combo_drift(session: AsyncSession) -> dict:
+    """Rolling live win rate per combo vs the backtest benchmark.
+
+    Returns {combo_key: {sample, win_rate, benchmark, drift_pts, status}} for
+    every combo with a stored benchmark that also has settled live trades.
+    """
+    bench = await persistence.get_setting(session, KEY_COMBO_BENCHMARK, {})
+    if not isinstance(bench, dict) or not bench:
+        return {}
+    trades = await persistence.last_trades(session, n=500)
+    grouped: dict[str, list] = {}
+    for t in trades:
+        if t.result not in ('WIN', 'LOSS'):
+            continue
+        key = f"{t.tf or '5m'}->{t.expiry or '15m'}"
+        grouped.setdefault(key, []).append(t)
+    out = {}
+    for key, b in bench.items():
+        rows = grouped.get(key, [])
+        if len(rows) < 10:
+            continue
+        wins = sum(1 for t in rows if t.result == 'WIN')
+        live_wr = wins / len(rows)
+        benchmark_wr = float(b['win_rate'])
+        out[key] = {
+            'sample': len(rows),
+            'win_rate': round(live_wr, 4),
+            'benchmark': benchmark_wr,
+            'drift_pts': round((benchmark_wr - live_wr) * 100, 1),
+            'status': 'disabled' if key in (await disabled_combos(session))
+            else ('ok' if live_wr >= benchmark_wr - COMBO_DRIFT_PTS / 100.0 else 'below'),
+        }
+    return out
+
+
+async def _evaluate_disabled(session: AsyncSession) -> list[dict]:
+    """Disable combos whose live win rate has stayed below their benchmark by
+    COMBO_DRIFT_PTS over >= COMBO_MIN_TRADES settled trades; re-enable combos
+    whose disable window has passed or that have recovered."""
+    disabled = await disabled_combos(session)
+    bench = await persistence.get_setting(session, KEY_COMBO_BENCHMARK, {})
+    now = time.time()
+    newly_disabled = []
+    for key, b in (bench or {}).items():
+        bwr = float(b['win_rate'])
+        trades = [t for t in await persistence.last_trades(session, n=500)
+                  if t.result in ('WIN', 'LOSS')
+                  and f"{t.tf or '5m'}->{t.expiry or '15m'}" == key]
+        if len(trades) < COMBO_MIN_TRADES:
+            continue
+        live_wr = sum(1 for t in trades if t.result == 'WIN') / len(trades)
+        threshold = bwr - COMBO_DRIFT_PTS / 100.0
+        if key in disabled:
+            # re-enable if recovered or past the re-evaluation window
+            if live_wr >= threshold or now - float(disabled[key].get('disabled_at', 0)) \
+                    >= COMBO_RE_EVALUATE_H * 3600:
+                disabled.pop(key)
+            continue
+        if live_wr < threshold:
+            disabled[key] = {
+                'disabled_at': now, 'reason': 'below benchmark',
+                'benchmark': bwr, 'live_wr': round(live_wr, 4),
+                'drift_pts': round((bwr - live_wr) * 100, 1)}
+            newly_disabled.append(key)
+    if disabled:
+        await persistence.set_setting(session, KEY_DISABLED, disabled)
+    else:
+        await persistence.set_setting(session, KEY_DISABLED, {})
+    return [{'combo': k, **disabled[k]} for k in newly_disabled]
+
+
 async def drift_monitor(session: AsyncSession) -> dict:
     """Hourly drift check: compare the rolling live win rate against the
+    benchmark, and auto-disable combos that stay below their per-combo
     benchmark. Returns the state; the caller sends alerts + records events."""
     state = await circuit_breaker_status(session)
     state['alert'] = False
+    state['combo_disables'] = await _evaluate_disabled(session)
+    state['disabled_combos'] = await disabled_combos(session)
     if state.get('win_rate') is None:
         return state
     sample = state['sample']

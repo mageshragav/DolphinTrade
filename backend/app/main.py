@@ -40,6 +40,23 @@ async def lifespan(app: FastAPI):
     from agents import NewsAgent, HeadlineAgent, RiskAgent
 
     ml = DecisionService(theta=settings.theta)
+    # load registry champions (if any) so the live pipeline uses validated
+    # models; otherwise the bundled static models are used
+    try:
+        from app.db import SessionLocal
+        from app.services import model_registry
+        async with SessionLocal() as session:
+            rows = await model_registry.list_models(session)
+        for r in rows:
+            if r['status'] != 'champion':
+                continue
+            combo = model_registry.parse_combo(r['combo'])
+            bundle = model_registry.load_bundle(r['model_path'])
+            ml.combo_models[combo] = bundle
+            LOGGER.info(f'registry champion loaded for {r["combo"]} '
+                        f'(v{r["version"]})')
+    except Exception as e:
+        LOGGER.warning(f'model registry load failed: {e}')
     news = NewsAgent()
     news.refresh(force=True)
     pairs = [p.strip() for p in settings.pairs.split(',') if p.strip()]
