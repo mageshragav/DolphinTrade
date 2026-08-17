@@ -3,6 +3,11 @@
   --text: #dbe4ee; --dim: #7d8ea3; --green: #2ecc71; --red: #ff5c5c;
   --blue: #4da3ff; --amber: #ffb84d;
 }
+[data-theme="light"] {
+  --bg: #f2f5f9; --panel: #ffffff; --panel2: #f6f8fb; --border: #d7dfe9;
+  --text: #16202b; --dim: #5b6b7d; --green: #16a34a; --red: #dc2626;
+  --blue: #2563eb; --amber: #b45309;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.5 'Segoe UI', system-ui, sans-serif; }
 .wrap { max-width: 1400px; margin: 0 auto; padding: 16px; }
@@ -146,3 +151,24 @@ textarea { background: var(--panel2); color: var(--text); border: 1px solid var(
 .bar { display: block; height: 100%; border-radius: 4px; }
 .bar.up { background: var(--green); }
 .bar.dn { background: var(--red); }
+
+/* ---- candlestick chart ---- */
+.candles { width: 100%; height: 260px; display: block; }
+
+/* ---- trade detail drawer ---- */
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(3, 6, 10, .6);
+  z-index: 50; display: flex; justify-content: flex-end; }
+.drawer { width: 420px; max-width: 95vw; background: var(--panel);
+  border-left: 1px solid var(--border); height: 100%; overflow-y: auto;
+  display: flex; flex-direction: column; }
+.drawer-head { display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.drawer-head h3 { font-size: 15px; }
+.drawer-body { padding: 14px 18px; }
+.kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px;
+  font-size: 13px; margin: 10px 0; }
+.kv span { color: var(--dim); }
+.kv b { text-align: right; word-break: break-word; }
+.drawer-section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.rationale { background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin-top: 8px; }

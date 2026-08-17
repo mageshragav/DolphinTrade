@@ -16,7 +16,8 @@ export interface Trade {
   entry?: number | null; take_profit?: number | null; stop_loss?: number | null;
   expiry_time?: string | null; status: string; exit_price?: number | null;
   result?: string | null; broker_ref?: string | null; dry_run: boolean;
-  stake?: number; reason?: string;
+  shadow?: boolean; stake?: number; reason?: string; winperc?: number | null;
+  candle_close_ts?: string | null; decision_id?: number | null;
 }
 
 export interface MonitorStatus {
@@ -54,6 +55,11 @@ export interface Settings {
 export interface AgentEventItem {
   ts?: string; kind: string; symbol?: string | null;
   summary: string; payload?: unknown;
+}
+
+export interface SignalItem {
+  id: number; ts?: string; symbol: string; expiry: string; action: string;
+  payload?: unknown; telegram_status?: string;
 }
 
 export interface ResultsData {

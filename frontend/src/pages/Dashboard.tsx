@@ -1,12 +1,14 @@
 import { Fragment, useEffect, useState } from 'react'
-import type { AgentsStatus, ResultsData, Decision, Trade } from '../api'
+import type { AgentsStatus, ResultsData, Decision, Trade, SignalItem, MonitorStatus } from '../api'
 import { decisionRow, tradeRow, COLS } from '../rows'
 import { Card, Table, Empty, Stat } from '../components/ui'
 
-export function Dashboard({ signals, neutrals, trades, results, agents, activity, log, nextCountdown }: {
+export function Dashboard({ signals, neutrals, trades, results, agents, activity, log, nextCountdown, onSelectTrade, status, signalsSent }: {
   signals: Decision[]; neutrals: Decision[]; trades: Trade[]
   results: ResultsData | null; agents: AgentsStatus | null
   activity: string[]; log: string[]; nextCountdown: number | null
+  onSelectTrade: (t: Trade) => void
+  status: MonitorStatus | null; signalsSent: SignalItem[]
 }) {
   return (
     <div className="grid">
@@ -27,13 +29,29 @@ export function Dashboard({ signals, neutrals, trades, results, agents, activity
           <Table cols={COLS}>
             {trades.length === 0 &&
               <tr><td colSpan={14} className="empty">No trades yet - signals will appear when the gate fires</td></tr>}
-            {trades.map(t => tradeRow(t))}
+            {trades.map(t => tradeRow(t, false, onSelectTrade))}
           </Table>
         </Card>
         <ResultsCard data={results} />
       </div>
       <div>
         <AgentsCard agents={agents} nextCountdown={nextCountdown} />
+        <ReadinessCard status={status} />
+        <Card title="Telegram mirror" count={signalsSent.length}>
+          {signalsSent.length === 0 && <Empty text="No signals forwarded to Telegram yet." />}
+          <div className="scroll" style={{ maxHeight: 180 }}>
+            {signalsSent.map(s => (
+              <div key={s.id} className="ag">
+                <span>{s.symbol} · {s.action} · {s.expiry}</span>
+                <span className={`chip ${s.telegram_status === 'sent' ? 'ok' : ''}`}
+                  style={s.telegram_status === 'sent'
+                    ? { background: '#0e2a1c', color: 'var(--green)' }
+                    : { background: '#1b2530', color: 'var(--dim)' }}>
+                  {s.telegram_status || 'pending'}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
         <Card title="Latest activity">
           {activity.map((a, i) => <div key={i} className="ag">{a}</div>)}
           {activity.length === 0 && <Empty text="waiting for agent events..." />}
@@ -44,6 +62,33 @@ export function Dashboard({ signals, neutrals, trades, results, agents, activity
         </Card>
       </div>
     </div>
+  )
+}
+
+export function ReadinessCard({ status }: { status: MonitorStatus | null }) {
+  if (!status) return null
+  const checks = [
+    { label: 'Broker session token', ok: status.token_ok !== false },
+    { label: 'Models loaded', ok: (status.model_count ?? 0) > 0 },
+    { label: 'WebSocket connected', ok: status.running === true || status.running === false },
+    { label: 'Scheduler running', ok: !!status.running },
+    { label: 'Regime classified', ok: (status.regime ?? 'unknown') !== 'unknown' },
+  ]
+  const ready = checks.every(c => c.ok)
+  return (
+    <Card title="Readiness" extra={
+      <span className={`chip ${ready ? 'ok' : ''}`}
+        style={ready ? { background: '#0e2a1c', color: 'var(--green)' }
+          : { background: '#2a1212', color: 'var(--red)' }}>
+        {ready ? 'READY' : 'CHECK'}</span>}>
+      {checks.map(c => (
+        <div key={c.label} className="ag">
+          <span>{c.label}</span>
+          <span style={{ color: c.ok ? 'var(--green)' : 'var(--red)' }}>
+            {c.ok ? '✓' : '✗'}</span>
+        </div>
+      ))}
+    </Card>
   )
 }
 

@@ -118,6 +118,23 @@ export function AnalyticsPage({ analytics, shadow }: {
     }
   }
 
+  const exportCsv = () => {
+    const r = bt.result
+    if (!r || r.trades.length === 0) return
+    const rows = [['symbol', 'tf', 'expiry', 'action', 'order_type', 'entry',
+                   'best_prob', 'ev', 'decision_ts', 'result', 'pnl'],
+      ...r.trades.map(t => [t.symbol, t.tf, t.expiry, t.action, t.order_type,
+        String(t.entry), String(t.best_prob), String(t.ev_score),
+        t.decision_ts, t.result ?? '', String(t.pnl)])]
+    const csv = rows.map(rr => rr.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `backtest_${bt.days}d_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const runBacktest = async () => {
     setBt(b => ({ ...b, busy: true, err: '', result: null }))
     try {
@@ -264,6 +281,9 @@ export function AnalyticsPage({ analytics, shadow }: {
             <button onClick={runBacktest} disabled={bt.busy || bt.orderTypes.length === 0}>
               {bt.busy ? 'Replaying...' : 'Run backtest'}
             </button>
+            {bt.result && bt.result.trades.length > 0 && (
+              <button onClick={exportCsv} disabled={bt.busy}>Export CSV</button>
+            )}
             {bt.err && <span className="err" style={{ margin: 0 }}>{bt.err}</span>}
           </div>
           {bt.result && (() => {

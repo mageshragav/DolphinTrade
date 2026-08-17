@@ -135,6 +135,21 @@ async def candle_stats_api(session: AsyncSession = Depends(get_db)):
     return await persistence.candle_stats(session)
 
 
+@router.get('/chart/{pair}')
+async def chart_api(pair: str, n: int = 120, interval: int = 300,
+                    session: AsyncSession = Depends(get_db)):
+    """OHLCV series for the candlestick chart (symbol convention: 'EURUSD'
+    or 'FX:EURUSD'). Returns the most recent `n` completed bars."""
+    sym = pair if pair.startswith('FX:') else 'FX:' + pair.upper()
+    candles = await persistence.load_candles(session, symbols=[sym],
+                                             interval=interval)
+    if candles.empty:
+        return {'ok': False, 'msg': f'no archived candles for {sym}'}
+    candles = candles.tail(n)
+    return {'ok': True, 'symbol': sym, 'interval': interval,
+            'bars': candles.to_dict('records')}
+
+
 class BacktestRequest(BaseModel):
     combos: str | None = None            # '5m:15m,15m:1h' (defaults to settings)
     theta: float | None = None

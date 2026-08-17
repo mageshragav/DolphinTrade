@@ -1,14 +1,17 @@
 import { Fragment, useEffect, useState } from 'react'
-import { get, post, put, type AgentsStatus, type MonitorStatus, type Settings, type Trade, type Decision, type ResultsData, type AnalyticsData, type ShadowData } from './api'
+import { get, post, put, type AgentsStatus, type MonitorStatus, type Settings, type Trade, type Decision, type ResultsData, type AnalyticsData, type ShadowData, type SignalItem } from './api'
 import { useWebSocket, type WSMessage } from './ws'
 import { Sidebar, type Page } from './components/Sidebar'
+import { TradeDrawer } from './components/TradeDrawer'
 import { Dashboard } from './pages/Dashboard'
 import { Analyze } from './pages/Analyze'
 import { AnalyticsPage } from './pages/Analytics'
+import { CandlesPage } from './pages/Candles'
+import { AlertsPage } from './pages/Alerts'
 import { SettingsPage } from './pages/Settings'
 import { ListPage } from './pages/List'
 
-const PAGES: Page[] = ['dashboard', 'analyze', 'analytics', 'settings', 'list']
+const PAGES: Page[] = ['dashboard', 'analyze', 'analytics', 'candles', 'alerts', 'settings', 'list']
 
 function pageFromHash(): Page {
   const h = location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0] as Page
@@ -26,14 +29,22 @@ export default function App() {
   const [results, setResults] = useState<ResultsData | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [shadow, setShadow] = useState<ShadowData | null>(null)
+  const [signalsSent, setSignalsSent] = useState<SignalItem[]>([])
   const [activity, setActivity] = useState<string[]>([])
   const [log, setLog] = useState<string[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const [dark, setDark] = useState(() => localStorage.getItem('dolphin-theme') !== 'light')
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    localStorage.setItem('dolphin-theme', dark ? 'dark' : 'light')
+  }, [dark])
 
   const refresh = async () => {
     try {
-      const [st, ag, se, tr, de, rs, an, sh] = await Promise.all([
+      const [st, ag, se, tr, de, rs, an, sh, sg] = await Promise.all([
         get<MonitorStatus>('/api/monitor/status'),
         get<AgentsStatus>('/api/agents'),
         get<Settings>('/api/settings'),
@@ -42,9 +53,10 @@ export default function App() {
         get<ResultsData>('/api/results?n=200'),
         get<AnalyticsData>('/api/analytics'),
         get<ShadowData>('/api/analytics/shadow'),
+        get<SignalItem[]>('/api/signals?n=15'),
       ])
       setStatus(st); setAgents(ag); setSettings(se); setTrades(tr); setResults(rs)
-      setAnalytics(an); setShadow(sh)
+      setAnalytics(an); setShadow(sh); setSignalsSent(sg)
       setSignals(de.filter(d => d.action === 'CALL' || d.action === 'PUT').slice(0, 40))
       setNeutrals(de.filter(d => d.action === 'NEUTRAL').slice(0, 40))
     } catch (e) { setError(String(e)) }
@@ -124,6 +136,8 @@ export default function App() {
           <button className="stop" onClick={() => control('stop')} disabled={!status?.running}>■ Stop</button>
           <button className={status?.kill_switch ? 'stop' : ''}
             onClick={() => kill(!status?.kill_switch)}>{status?.kill_switch ? 'Resume' : 'Kill'}</button>
+          <button onClick={() => setDark(d => !d)}
+            title="toggle light/dark theme">{dark ? '☀' : '☾'}</button>
         </div>
 
         {error && <div className="err">{error}</div>}
@@ -132,7 +146,8 @@ export default function App() {
           {page === 'dashboard' && (
             <Dashboard signals={signals} neutrals={neutrals} trades={trades}
               results={results} agents={agents} activity={activity} log={log}
-              nextCountdown={nextCountdown} />
+              nextCountdown={nextCountdown} onSelectTrade={setSelectedTrade}
+              status={status} signalsSent={signalsSent} />
           )}
 {page === 'analyze' && (
             <Analyze decisions={[...signals, ...neutrals]} trades={results?.trades ?? trades}
@@ -141,6 +156,8 @@ export default function App() {
           {page === 'analytics' && (
             <AnalyticsPage analytics={analytics} shadow={shadow} />
           )}
+          {page === 'candles' && <CandlesPage />}
+          {page === 'alerts' && <AlertsPage />}
           {page === 'settings' && (
             <SettingsPage settings={settings} status={status}
               onSave={saveSettings} onRefresh={refresh} />
@@ -148,6 +165,7 @@ export default function App() {
           {page === 'list' && <ListPage signals={signals} trades={trades} />}
         </div>
       </div>
+      <TradeDrawer trade={selectedTrade} onClose={() => setSelectedTrade(null)} />
     </div>
   )
 }

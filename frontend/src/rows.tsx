@@ -49,12 +49,13 @@ export function decisionRow(d: Decision, dual = false) {
   )
 }
 
-export function tradeRow(t: Trade, dual = false) {
+export function tradeRow(t: Trade, dual = false, onSelect?: (t: Trade) => void) {
   const isBuy = t.action === 'CALL'
   const res = (t.result || '').toUpperCase()
   const resColor = res === 'WIN' ? 'var(--green)' : res === 'LOSS' ? 'var(--red)' : 'var(--dim)'
   return (
-    <tr key={t.id}>
+    <tr key={t.id} onClick={onSelect ? () => onSelect(t) : undefined}
+      style={onSelect ? { cursor: 'pointer' } : undefined}>
       {timeCell(t.ts, dual)}<td>{t.symbol}</td><td>{t.tf}</td><td>{t.expiry}</td>
       <td className={isBuy ? 'a-CALL' : 'a-PUT'}>{isBuy ? 'BUY' : 'SELL'}</td><td>-</td>
       <td>{num(t.candle_open)}</td><td>{num(t.candle_close)}</td>

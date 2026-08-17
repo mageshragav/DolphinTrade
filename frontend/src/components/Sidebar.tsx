@@ -1,9 +1,11 @@
-export type Page = 'dashboard' | 'analyze' | 'analytics' | 'settings' | 'list'
+export type Page = 'dashboard' | 'analyze' | 'analytics' | 'candles' | 'alerts' | 'settings' | 'list'
 
 const ITEMS: { id: Page; label: string; icon: string; badge?: 'signals' | 'trades' }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '◈', badge: 'signals' },
   { id: 'analyze', label: 'Analyze', icon: '◔', badge: 'trades' },
   { id: 'analytics', label: 'Analytics', icon: '▤' },
+  { id: 'candles', label: 'Charts', icon: '▐' },
+  { id: 'alerts', label: 'Alerts', icon: '⚠' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
   { id: 'list', label: 'List', icon: '☰' },
 ]

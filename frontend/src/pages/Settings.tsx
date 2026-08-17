@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { MonitorStatus, Settings } from '../api'
 import { post } from '../api'
-import { Card } from '../components/ui'
+import { Card, Empty } from '../components/ui'
 
 export function SettingsPage({ settings, status, onSave, onRefresh }: {
   settings: Settings | null; status: MonitorStatus | null
@@ -11,6 +11,14 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
   const [token, setToken] = useState('')
   const [tokenMsg, setTokenMsg] = useState('')
   const [tokenBusy, setTokenBusy] = useState(false)
+  const [accounts, setAccounts] = useState<{ id: number; name: string; group: string;
+    type: string; currency: string; balance: number }[] | null>(null)
+
+  useEffect(() => {
+    post<{ ok: boolean; accounts?: typeof accounts }>('/api/accounts').then(r => {
+      if (r.ok && r.accounts) setAccounts(r.accounts)
+    }).catch(() => { /* ignore */ })
+  }, [])
 
   useEffect(() => { if (settings) setForm(settings) }, [settings])
   const f = (k: keyof Settings) => ({
@@ -201,6 +209,32 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
           <div className="ag"><span>News events</span><span>{status?.news_events ?? '-'}</span></div>
           <div className="ag"><span>Equity</span><span>${status?.equity ?? '-'}</span></div>
           <div className="ag"><span>Stake</span><span>{(status?.stake_pct ?? 0) * 100}%</span></div>
+        </Card>
+
+        <Card title="Broker accounts" count={accounts?.length ?? 0}>
+          {!accounts && <Empty text="Loading accounts..." />}
+          {accounts?.map(a => (
+            <div key={a.id} className="ag">
+              <span>{a.name} <span className="chip" style={{ background: '#1b2530', color: 'var(--dim)' }}>
+                {a.group}</span></span>
+              <span><b>{a.currency} {a.balance.toFixed(2)}</b></span>
+            </div>
+          ))}
+        </Card>
+
+        <Card title="Presets">
+          <div className="cfg-row">
+            {(['conservative', 'balanced', 'aggressive'] as const).map(p => (
+              <button key={p} style={{ padding: '4px 14px' }}
+                onClick={() => {
+                  const v = { conservative: { stake_pct: 0.005, max_trades_per_day: 6, theta: 0.70, max_concurrent: 1 },
+                              balanced: { stake_pct: 0.01, max_trades_per_day: 10, theta: 0.65, max_concurrent: 2 },
+                              aggressive: { stake_pct: 0.02, max_trades_per_day: 20, theta: 0.60, max_concurrent: 4 } }[p]
+                  onSave(v)
+                }}>{p}</button>
+            ))}
+            <span className="hint" style={{ margin: 0 }}>quick risk profile presets</span>
+          </div>
         </Card>
       </div>
     </div>
