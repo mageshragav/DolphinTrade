@@ -79,7 +79,7 @@ class Client():
 
 
 cookies = {
-    'access_token': 'PLACEHOLDER_JWT',
+    'access_token': '<from env: DT_OLYMP_ACCESS_TOKEN>',
     'jwt_auth': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3MTQyMDQ4NTgsIm5iZiI6MTcxNDIwNDg1OCwiZXhwIjoxNzE0MjkxMjU4LCJ1c2VyX2lkIjo0NjMwMDA4NCwiZW1haWwiOiJtYWdlc2htZ3IxQGdtYWlsLmNvbSJ9.G2xDowEWJL5_H_wBALI_gJp7B_ERimIRWDt0ONoRALXCxhiLaEX8M8pZBI2SXpjIeU2vLU0rTWegSAWKGv9qO89ACByw9lBvRf8MmiiBHVhJiWuiYFgDKPxu-VPm9qRJoVPBaGJJJ3qFcO7Nkd1MRCYQt1BNX43O9ZY6pYUl2DdsgmbYFU0hDElJljZbiuk2cIgvuNg_gs8iUqL_JvMXs2a2vWHIkZUC-yqxQPuXCeKt_mL0isENltkr5k7YxUW2AVND9EpYo0srzczsvXbNgINyE040IxfUXrwGVzVbpdKw73W6ZcMN28VOCsYKZ_tEyypS5TjFyZborsr5RGMM_2ISDwMuHvj6iJYNiW7PvpQJa7GE-QzJI3F6lp51zLtpGHBRY6eiK-AHH5ol7o7r0S95auQJbnznoljKuOKNCzGp9mweeY-gS7-zzSydMT5aLZIfuFYlULCbHhntGwD37BtaCv0i36h0Dh1z4-LrpnOIKXgkyuoVNtDx2gDwcS7NsWPgSOW4O6MO-8d8mn7oIsmczhADtG34wVFT8qZlLwhllfOvNHYZt-Kw5IryVtKewVyIBtBk8wPd8dNP4fK-Dr0GECAa8b8QrvzjqrU7STBAIcrXCngcc1Th8ekZm0ST3QxYYU1hVtenha5W6w9hQLiwvmfIR8ycj08mUdqTfCA',
 }  
 cookies_str = '; '.join([f"{key}={value}" for key, value in cookies.items()])
