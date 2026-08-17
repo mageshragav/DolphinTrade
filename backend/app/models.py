@@ -2,7 +2,8 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import (JSON, Boolean, DateTime, Float, Integer, String, Text)
+from sqlalchemy import (JSON, Boolean, DateTime, Float, Integer, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -70,6 +71,7 @@ class Trade(Base):
     order_type: Mapped[str] = mapped_column(String(12), default='binary')
     placed_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
+    shadow: Mapped[bool] = mapped_column(Boolean, default=False)  # paper-trade ledger
     stake: Mapped[float] = mapped_column(Float, default=0.0)
     reason: Mapped[str] = mapped_column(Text, default='')
 
@@ -104,3 +106,25 @@ class BotSetting(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[dict] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Candle(Base):
+    """Historical OHLCV archive (append-only; powers backtests + analytics).
+
+    One row per (symbol, bar-open-ts, interval). Upserts are idempotent so
+    repeated live fetches never duplicate bars.
+    """
+
+    __tablename__ = 'candles'
+    __table_args__ = (UniqueConstraint('symbol', 'ts', 'interval',
+                                       name='uq_candle_symbol_ts_interval'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(16), index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    interval: Mapped[int] = mapped_column(Integer, default=300)   # bar seconds
+    open: Mapped[float] = mapped_column(Float, nullable=True)
+    high: Mapped[float] = mapped_column(Float, nullable=True)
+    low: Mapped[float] = mapped_column(Float, nullable=True)
+    close: Mapped[float] = mapped_column(Float, nullable=True)
+    volume: Mapped[float] = mapped_column(Float, default=0.0)

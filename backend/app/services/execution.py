@@ -52,7 +52,7 @@ class ExecutionService:
 
     async def _place_one(self, session, d: dict, decision_id: int, mode: str,
                          limits: dict, stake: float, dry_run: bool, ok: bool,
-                         why: str) -> dict:
+                         why: str, shadow: bool = False) -> dict:
         """Place (or record) a single order of `mode` and persist its trade."""
         reason_tag = d.get('_reason_tag', '')
         trade = {
@@ -67,12 +67,14 @@ class ExecutionService:
             'candle_close_ts': d.get('candle_close', ''),
             'stake': stake,
             'dry_run': dry_run,
+            'shadow': shadow,
             'order_type': mode,
         }
         placed = False
         if dry_run:
             trade['status'] = 'open'
-            trade['reason'] = f'dry-run ({mode})' + \
+            tag = 'shadow' if shadow else 'dry-run'
+            trade['reason'] = f'{tag} ({mode})' + \
                 (f' | {reason_tag}' if reason_tag else '')
             placed = True
         elif ok:
@@ -154,6 +156,8 @@ class ExecutionService:
         limits = await risk.get_limits(session)
         modes = risk.normalize_order_types(limits)
         dry_run = limits.get('dry_run', True)
+        trade_mode = limits.get('trade_mode', 'dry')
+        shadow = trade_mode == 'shadow'
         ok, why = await risk.allowed(session, d['symbol'])
 
         # per-mode idempotency: the same signal may trade both markets, but
@@ -170,7 +174,8 @@ class ExecutionService:
         results = []
         for mode in modes:
             results.append(await self._place_one(session, d, decision_id, mode,
-                                                 limits, stake, dry_run, ok, why))
+                                                 limits, stake, dry_run, ok, why,
+                                                 shadow=shadow))
 
         placed_any = any(r['placed'] for r in results)
         first = results[0] if results else {}

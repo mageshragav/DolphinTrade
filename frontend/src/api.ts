@@ -36,7 +36,8 @@ export interface AgentsStatus {
 }
 
 export interface Settings {
-  dry_run: boolean; max_trades_per_day: number; max_daily_loss_pct: number;
+  dry_run: boolean; trade_mode: 'live' | 'dry' | 'shadow';
+  max_trades_per_day: number; max_daily_loss_pct: number;
   symbol_cooldown_min: number; stake_pct: number; equity: number;
   order_type: 'binary' | 'multiplier'; order_types: ('binary' | 'multiplier')[]; multiplicator: number;
   sl_tp_mode: 'signal_levels' | 'atr'; atr_sl_mult: number; atr_tp_mult: number;
@@ -61,6 +62,48 @@ export interface ResultsData {
   by_symbol: Record<string, { trades: number; wins: number; losses: number;
                               win_rate: number | null }>
   trades: Trade[]
+}
+
+export interface ShadowData {
+  shadow: { trades: number; settled: number; win_rate: number | null; net_pnl: number; profit_factor: number | null }
+  live: { trades: number; settled: number; win_rate: number | null; net_pnl: number; profit_factor: number | null }
+  dry: { trades: number; settled: number; win_rate: number | null; net_pnl: number; profit_factor: number | null }
+  shadow_count: number; live_count: number; dry_count: number
+}
+
+export interface AnalyticsData {
+  summary: {
+    total: number; settled: number; wins: number; losses: number; draws: number;
+    win_rate: number | null; profit_factor: number | null; net_pnl: number;
+    max_drawdown: number; expectancy: number; avg_pnl: number;
+    longest_win_streak: number; longest_loss_streak: number;
+    rolling_win_rate: number | null; dry_run: boolean;
+  }
+  equity_curve: { ts?: string | null; symbol: string; action: string;
+                  order_type: string; pnl: number; equity: number }[]
+  by_symbol: Record<string, { trades: number; wins: number; losses: number; net: number; win_rate: number | null }>
+  by_order_type: Record<string, { trades: number; wins: number; losses: number; net: number; win_rate: number | null }>
+  by_hour: Record<string, { trades: number; wins: number; losses: number; win_rate: number | null }>
+  by_day: Record<string, { trades: number; wins: number; losses: number; net: number; win_rate: number | null }>
+  drift: { sample: number; paused: boolean; win_rate: number | null; projected: number | null;
+           benchmark_source?: string; drift_pts?: number; status: string }
+  benchmark: { win_rate: number; source: string; ts?: string | null; trades: number }
+  generated_at: string
+}
+
+export interface BacktestResult {
+  ok: boolean; benchmark_saved?: boolean
+  trades: {
+    symbol: string; tf: string; expiry: string; action: string; order_type: string;
+    entry: number; decision_ts: string; best_prob: number; ev_score: number;
+    result: string | null; pnl: number;
+  }[]
+  summary: { trades: number; settled: number; wins: number; losses: number; draws: number;
+             win_rate: number | null; profit_factor: number | null; net_pnl: number;
+             max_drawdown: number; expectancy: number; sharpe: number }
+  by_symbol: Record<string, { trades: number; win_rate: number | null; net_pnl: number }>
+  by_combo: Record<string, { trades: number; win_rate: number | null; net_pnl: number }>
+  equity_curve: { ts?: string; symbol: string; pnl: number; equity: number }[]
 }
 
 const API = ''

@@ -94,7 +94,16 @@ class TradingRuntime:
     async def fetch_candles(self, feed):
         settings = get_settings()
         pairs = [p.strip() for p in settings.pairs.split(',') if p.strip()]
-        return await asyncio.to_thread(feed.fetch_candles, pairs, 600)
+        df = await asyncio.to_thread(feed.fetch_candles, pairs, 600)
+        if df is not None and not df.empty:
+            try:
+                async with SessionLocal() as session:
+                    n = await persistence.archive_candles(session, df)
+                if n:
+                    LOGGER.debug(f'candle archive: +{n} bars')
+            except Exception as e:
+                LOGGER.warning(f'candle archive failed: {e}')
+        return df
 
     async def refresh_agents(self, pairs):
         try:

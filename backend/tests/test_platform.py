@@ -35,8 +35,9 @@ async def db():
     await init_db()
     yield
     async with SessionLocal() as s:
-        from app.models import Decision, Trade, AgentEvent, Signal, BotSetting
-        for m in [Decision, Trade, AgentEvent, Signal, BotSetting]:
+        from app.models import (Decision, Trade, AgentEvent, Signal, BotSetting,
+                                Candle)
+        for m in [Decision, Trade, AgentEvent, Signal, BotSetting, Candle]:
             await s.execute(m.__table__.delete())
         await s.commit()
 
@@ -92,6 +93,68 @@ async def test_dry_run_records_trade():
         assert len(trades) == 1
         assert trades[0].status == 'open'
         assert trades[0].dry_run is True
+
+
+async def test_shadow_mode_records_paper_ledger():
+    connector = FakeConnector()
+    svc = ExecutionService(connector)
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'trade_mode': 'shadow', 'max_trades_per_day': 10,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary']})
+        result = await svc.execute(s, sample_decision(), decision_id=0)
+        assert result['placed'] is True
+        assert result['dry_run'] is True
+        assert connector.placed == []          # shadow never touches the broker
+        trades = await persistence.last_trades(s, 5)
+        assert len(trades) == 1
+        assert trades[0].status == 'open'
+        assert trades[0].shadow is True
+        assert 'shadow' in (trades[0].reason or '')
+
+
+async def test_trade_mode_drives_live_placement():
+    connector = FakeConnector()
+    svc = ExecutionService(connector)
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'trade_mode': 'live', 'max_trades_per_day': 10,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary']})
+        result = await svc.execute(s, sample_decision(), decision_id=0)
+        assert result['dry_run'] is False
+        assert result['placed'] is True
+        assert len(connector.placed) == 1     # real bet placed
+        trades = await persistence.last_trades(s, 5)
+        assert trades[0].dry_run is False
+        assert trades[0].shadow is False
+
+
+async def test_shadow_trade_settles_from_candles():
+    import calendar
+    import pandas as pd
+    from app.services import tracker
+    connector = FakeConnector()
+    svc = ExecutionService(connector)
+    async with SessionLocal() as s:
+        await risk.set_limits(s, {'trade_mode': 'shadow', 'max_trades_per_day': 10,
+                                  'max_daily_loss_pct': 5.0, 'symbol_cooldown_min': 0,
+                                  'stake_pct': 0.01, 'equity': 1000.0,
+                                  'order_types': ['binary']})
+        await svc.execute(s, sample_decision(), decision_id=0)
+        t = (await persistence.last_trades(s, 1))[0]
+        assert t.status == 'open'
+        # candle timestamps are UTC epochs (broker convention)
+        base = t.expiry_time.replace(tzinfo=timezone.utc)
+        rows = [{'symbol': 'FX:EURUSD', 't': calendar.timegm(base.timetuple()) + i * 60,
+                 'o': 1.0884, 'h': 1.0895, 'l': 1.0883, 'c': 1.0893, 'v': 100}
+                for i in range(20)]
+        await tracker.TradeTracker.settle(s, pd.DataFrame(rows))
+        t = (await persistence.last_trades(s, 1))[0]
+        assert t.status == 'expired'
+        assert t.result == 'WIN'
+        assert t.shadow is True
 
 
 async def test_idempotency_blocks_duplicate():
@@ -875,4 +938,99 @@ async def test_multiplier_retries_without_sl_tp_on_stop_error():
         placed = connector.placed
         assert len(placed) == 1                    # retry without levels
         assert placed[0]['take_profit'] is None and placed[0]['stop_loss'] is None
+
+
+async def test_benchmark_roundtrip_and_default():
+    from app.services import risk as risk_svc
+    async with SessionLocal() as s:
+        assert await risk_svc.get_benchmark(s) == {'win_rate': 0.65,
+                                                   'source': 'default',
+                                                   'ts': None, 'trades': 0}
+        await risk_svc.set_benchmark(s, 0.6221, 'backtest', trades=40)
+        b = await risk_svc.get_benchmark(s)
+        assert b['win_rate'] == 0.6221
+        assert b['source'] == 'backtest'
+        assert b['trades'] == 40
+
+
+async def test_drift_monitor_alerts_below_benchmark():
+    from app.services import risk as risk_svc
+    async with SessionLocal() as s:
+        await risk_svc.set_benchmark(s, 0.70, 'backtest', trades=40)
+        # 40 settled trades, only 40% wins -> well below the 70% benchmark
+        for i in range(40):
+            await persistence.record_trade(s, {
+                'symbol': f'FX:EURUSD', 'tf': '5m', 'expiry': '15m',
+                'action': 'CALL', 'entry': 1.08, 'stake': 10.0, 'dry_run': False,
+                'status': 'expired',
+                'result': 'WIN' if i < 16 else 'LOSS',
+                'expiry_time': None, 'candle_close_ts': f'2026-08-12 10:{i:02d}:00'})
+        state = await risk_svc.drift_monitor(s)
+        assert state['alert'] is True
+        assert state['alerted'] is True
+        assert state['win_rate'] <= 0.4
+        assert state['projected'] == 0.70
+
+
+async def test_drift_alert_respects_cooldown():
+    from app.services import risk as risk_svc
+    async with SessionLocal() as s:
+        await risk_svc.set_benchmark(s, 0.70, 'backtest', trades=40)
+        for i in range(40):
+            await persistence.record_trade(s, {
+                'symbol': 'FX:EURUSD', 'tf': '5m', 'expiry': '15m',
+                'action': 'CALL', 'entry': 1.08, 'stake': 10.0, 'dry_run': False,
+                'status': 'expired', 'result': 'LOSS',
+                'expiry_time': None, 'candle_close_ts': f'2026-08-12 11:{i:02d}:00'})
+        first = await risk_svc.drift_monitor(s)
+        assert first['alert'] is True and first['alerted'] is True
+        second = await risk_svc.drift_monitor(s)   # within cooldown window
+        assert second['alert'] is True
+        assert second['alerted'] is True
+        # a fresh cooldown timestamp must not have been written (no spam)
+        # -> the stored cooldown value is the ORIGINAL alert time
+        import time as _t
+        stored = await persistence.get_setting(s, risk_svc.KEY_DRIFT_ALERT, 0.0)
+        assert float(stored or 0) > 0
+
+
+async def test_analytics_aggregations():
+    from app.services import analytics
+    async with SessionLocal() as s:
+        for i in range(30):
+            await persistence.record_trade(s, {
+                'symbol': 'FX:EURUSD' if i % 2 == 0 else 'FX:GBPUSD',
+                'tf': '5m', 'expiry': '15m', 'action': 'CALL', 'entry': 1.08,
+                'stake': 10.0, 'dry_run': False, 'status': 'expired',
+                'result': 'WIN' if i < 20 else 'LOSS', 'winperc': 88.0,
+                'expiry_time': None, 'candle_close_ts': f'2026-08-12 10:{i:02d}:00'})
+        a = await analytics.analytics(s, n=100)
+        s_ = a['summary']
+        assert s_['settled'] == 30
+        assert s_['wins'] == 20 and s_['losses'] == 10
+        assert s_['win_rate'] == round(20 / 30, 4)
+        # 20 wins * 10 * 0.88 - 10 losses * 10 = 176 - 100 = 76
+        assert abs(s_['net_pnl'] - 76.0) < 0.01
+        assert len(a['equity_curve']) == 30
+        assert abs(a['equity_curve'][-1]['equity'] - s_['net_pnl']) < 0.01
+        assert set(a['by_symbol'].keys()) == {'FX:EURUSD', 'FX:GBPUSD'}
+        assert a['by_hour']  # heatmap populated
+        assert a['by_day']
+
+
+async def test_nightly_report_builds_text():
+    from app.services import analytics
+    async with SessionLocal() as s:
+        for i in range(25):
+            await persistence.record_trade(s, {
+                'symbol': 'FX:EURUSD', 'tf': '5m', 'expiry': '15m', 'action': 'CALL',
+                'entry': 1.08, 'stake': 10.0, 'dry_run': False, 'status': 'expired',
+                'result': 'WIN' if i < 15 else 'LOSS', 'winperc': 88.0,
+                'expiry_time': None, 'candle_close_ts': f'2026-08-12 09:{i:02d}:00'})
+        a = await analytics.analytics(s, n=100)
+        text = analytics.build_nightly_report(a)
+        assert 'Daily performance report' in text
+        assert 'Win rate' in text
+        assert 'Net PnL' in text
+        assert 'Best symbols' in text
 

@@ -12,6 +12,13 @@ from pydantic_settings import BaseSettings
 
 # make the existing research modules importable (dolphin/ package)
 DOLPHIN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dolphin')
+# Import the OUTER dolphin package BEFORE inserting its dir on sys.path: with
+# backend/dolphin at path[0] first, `import dolphin` would bind to the nested
+# backend/dolphin/dolphin (Django) package and dolphin.ml_service etc. become
+# unimportable. Importing it first (backend is already importable here) pins
+# the correct outer package; the insert below then only serves the legacy
+# `common.*` / `dolphin.*` imports used by the research scripts.
+import dolphin  # noqa: F401
 if DOLPHIN_DIR not in sys.path:
     sys.path.insert(0, DOLPHIN_DIR)
 

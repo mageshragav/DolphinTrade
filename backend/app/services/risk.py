@@ -5,6 +5,7 @@ the UI or Telegram without a restart.
 """
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +18,18 @@ KEY_LIMITS = 'risk_limits'
 KEY_KILL = 'kill_switch'
 KEY_DRIFT = 'drift_stats'
 KEY_PEAK = 'equity_peak'
+KEY_BENCHMARK = 'benchmark_stats'
+KEY_DRIFT_ALERT = 'drift_alert'
+
+DEFAULT_BENCHMARK = 0.65        # expected win rate before a backtest benchmark
+DRIFT_ALERT_PTS = 5.0           # alert when rolling live WR < benchmark - 5 pts
+DRIFT_MIN_TRADES = 20           # min settled trades before judging
+DRIFT_ALERT_COOLDOWN_H = 6.0    # don't re-alert more than once per 6h
 
 
 def default_limits():
     return {
+        'trade_mode': 'dry',       # live | dry (record only) | shadow (paper ledger)
         'dry_run': True,
         'max_trades_per_day': 14,
         'max_daily_loss_pct': 5.0,
@@ -62,6 +71,10 @@ async def get_limits(session: AsyncSession) -> dict:
         # is explicitly stored
         if 'order_types' not in limits and limits.get('order_type'):
             merged['order_types'] = [limits['order_type']]
+        # trade_mode (explicitly stored) drives dry_run; legacy configs that
+        # only set dry_run keep their own behaviour
+        if 'trade_mode' in limits:
+            merged['dry_run'] = limits['trade_mode'] != 'live'
     return merged
 
 
@@ -154,16 +167,63 @@ async def stake_for(session: AsyncSession, base_stake: float, limits: dict) -> f
 
 async def circuit_breaker_status(session: AsyncSession) -> dict:
     """Realized-vs-projected drift over the last N settled trades."""
+    benchmark = await get_benchmark(session)
+    projected = benchmark.get('win_rate', DEFAULT_BENCHMARK)
     stats = await persistence.get_setting(session, KEY_DRIFT, {})
     trades = await persistence.last_trades(session, n=300)
     settled = [t for t in trades if t.result in ('WIN', 'LOSS')]
     if len(settled) < 20:
         return {'sample': len(settled), 'paused': False, 'win_rate': None,
-                'projected': None, 'status': 'collecting'}
+                'projected': projected, 'benchmark_source': benchmark.get('source'),
+                'status': 'collecting'}
     wins = sum(1 for t in settled if t.result == 'WIN')
     win_rate = wins / len(settled)
-    projected = 0.65 if not stats else stats.get('projected', 0.65)
     drift = projected - win_rate
     paused = drift >= 4.0 and len(settled) >= 50
     return {'sample': len(settled), 'paused': paused, 'win_rate': round(win_rate, 3),
-            'projected': projected, 'drift_pts': round(drift * 100, 1), 'status': 'paused' if paused else 'ok'}
+            'projected': projected, 'benchmark_source': benchmark.get('source'),
+            'drift_pts': round(drift * 100, 1), 'status': 'paused' if paused else 'ok'}
+
+
+async def get_benchmark(session: AsyncSession) -> dict:
+    """Expected win rate to compare live performance against (set from a
+    backtest run). Falls back to the calibrated default."""
+    b = await persistence.get_setting(session, KEY_BENCHMARK, {})
+    if isinstance(b, dict) and b.get('win_rate'):
+        return {'win_rate': float(b['win_rate']), 'source': b.get('source', 'backtest'),
+                'ts': b.get('ts'), 'trades': b.get('trades')}
+    return {'win_rate': DEFAULT_BENCHMARK, 'source': 'default', 'ts': None, 'trades': 0}
+
+
+async def set_benchmark(session: AsyncSession, win_rate: float, source: str,
+                        trades: int = 0):
+    await persistence.set_setting(session, KEY_BENCHMARK, {
+        'win_rate': round(float(win_rate), 4), 'source': source,
+        'ts': str(datetime.now(timezone.utc)), 'trades': int(trades)})
+
+
+async def drift_monitor(session: AsyncSession) -> dict:
+    """Hourly drift check: compare the rolling live win rate against the
+    benchmark. Returns the state; the caller sends alerts + records events."""
+    state = await circuit_breaker_status(session)
+    state['alert'] = False
+    if state.get('win_rate') is None:
+        return state
+    sample = state['sample']
+    benchmark = state['projected']
+    if sample < DRIFT_MIN_TRADES:
+        return state
+    threshold = benchmark - DRIFT_ALERT_PTS / 100.0
+    if state['win_rate'] >= threshold:
+        return state
+    # below threshold: respect the alert cooldown (don't spam Telegram)
+    last = await persistence.get_setting(session, KEY_DRIFT_ALERT, 0.0)
+    if time.time() - float(last or 0) < DRIFT_ALERT_COOLDOWN_H * 3600:
+        state['alert'] = True          # still in breach, but already alerted
+        state['alerted'] = True
+        return state
+    await persistence.set_setting(session, KEY_DRIFT_ALERT, time.time())
+    state['alert'] = True
+    state['alerted'] = True
+    state['threshold'] = round(threshold, 3)
+    return state

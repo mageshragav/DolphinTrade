@@ -42,3 +42,11 @@ dependencies = [
     "httpx>=0.27.0",
     "python-multipart>=0.0.9",
 ]
+
+[tool.pytest.ini_options]
+# Put the backend root on sys.path before any test imports so the `dolphin`
+# namespace package resolves to backend/dolphin regardless of collection order
+# (otherwise app/config.py's own path insert can shadow it with the nested
+# backend/dolphin/dolphin Django package and break dolphin.* imports).
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -54,6 +54,8 @@ class Scheduler:
         self._token_warned = set()          # thresholds already alerted
         self._scan_hour = None              # last UTC hour the guarantee ran
         self._last_refresh_attempt = 0.0    # epoch of last auto-refresh launch
+        self._last_drift_check = 0.0        # epoch of last drift monitor run
+        self._last_report_day = ''         # last UTC day the daily report ran
 
     async def _auto_refresh_token(self, force=False):
         """Launch the headless auto-login (fire and forget) when the session
@@ -160,6 +162,57 @@ class Scheduler:
                     except Exception:
                         pass
 
+    async def _nightly_report(self):
+        """Daily 00:05 UTC Telegram performance report (template-based)."""
+        from app.runtime_ctx import RUNTIME
+        from app.services import analytics
+        from app.services import persistence
+        async with SessionLocal() as session:
+            a = await analytics.analytics(session)
+            text = analytics.build_nightly_report(a)
+            await persistence.record_agent_event(
+                session, 'report', 'daily report generated', None,
+                {'text': text})
+        bot = RUNTIME.get('telegram')
+        if bot:
+            try:
+                bot.send(text)
+                return {'sent': True}
+            except Exception as e:
+                LOGGER.warning(f'daily report send failed: {e}')
+        return {'sent': False}
+
+    async def _check_drift(self):
+        """Hourly drift check: rolling live win rate vs benchmark -> alert."""
+        from app.runtime_ctx import RUNTIME
+        from app.services import persistence
+        async with SessionLocal() as session:
+            state = await risk_svc.drift_monitor(session)
+            if state.get('alert') and not state.get('alerted'):
+                await persistence.record_agent_event(
+                    session, 'drift', state['status'], None,
+                    {'win_rate': state.get('win_rate'),
+                     'benchmark': state.get('projected'),
+                     'threshold': state.get('threshold')})
+                await ws.broadcast({'type': 'alert',
+                                    'message': f'DRIFT: live win rate '
+                                               f'{state["win_rate"]} vs benchmark '
+                                               f'{state["projected"]} (below '
+                                               f'{state.get("threshold")})'})
+        if state.get('alert') and not state.get('alerted'):
+            bot = RUNTIME.get('telegram')
+            if bot:
+                try:
+                    bot.send(f'⚠️ DRIFT ALERT: live win rate '
+                             f'{state["win_rate"]} vs benchmark '
+                             f'{state["projected"]} over {state["sample"]} trades - '
+                             f'performance is degrading. Review settings or pause.')
+                except Exception:
+                    pass
+            LOGGER.warning(f'drift alert: win_rate={state["win_rate"]} '
+                           f'vs benchmark={state["projected"]}')
+        return state
+
     async def run(self):
         self.running = True
         settings = get_settings()
@@ -175,6 +228,22 @@ class Scheduler:
                     await self._check_token_health()
                 except Exception as e:
                     LOGGER.debug(f'token health check failed: {e}')
+            # drift monitor (rolling live win rate vs benchmark) every hour
+            if now - self._last_drift_check > 3600:
+                self._last_drift_check = now
+                try:
+                    await self._check_drift()
+                except Exception as e:
+                    LOGGER.debug(f'drift check failed: {e}')
+            # nightly performance report at 00:05 UTC
+            if self._last_report_day != datetime.now(timezone.utc).strftime('%Y%m%d') \
+                    and datetime.now(timezone.utc).minute >= 5 \
+                    and datetime.now(timezone.utc).hour == 0:
+                self._last_report_day = datetime.now(timezone.utc).strftime('%Y%m%d')
+                try:
+                    await self._nightly_report()
+                except Exception as e:
+                    LOGGER.warning(f'nightly report failed: {e}')
             # hourly minimum-signal guarantee: once per hour at :minute, if
             # the hour has no trade, pick the best candidate above the floor
             hh = datetime.now(timezone.utc)

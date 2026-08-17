@@ -36,6 +36,7 @@ async def init_db():
     await _ensure_column(engine, 'trades', 'winperc', 'FLOAT')
     await _ensure_column(engine, 'trades', 'order_type', 'VARCHAR(12)')
     await _ensure_column(engine, 'trades', 'candle_close_ts', 'VARCHAR(32)')
+    await _ensure_column(engine, 'trades', 'shadow', 'BOOLEAN')
 
 
 async def _ensure_column(engine_, table: str, column: str, ddl_type: str):

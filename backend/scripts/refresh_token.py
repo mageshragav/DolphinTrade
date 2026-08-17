@@ -7,7 +7,7 @@ and harvests the fresh access_token cookie - then pushes it to the running
 DolphinTrade server which hot-swaps it in place (no restart).
 
 Usage:
-    python refresh_token.py --push http://127.0.0.1:8000 [--profile DIR]
+    python refresh_token.py --push http://127.0.0.1:8001 [--profile DIR]
     python refresh_token.py --grab-only          # just print the cookie
 
 Env:

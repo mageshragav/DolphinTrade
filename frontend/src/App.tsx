@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useState } from 'react'
-import { get, post, put, type AgentsStatus, type MonitorStatus, type Settings, type Trade, type Decision, type ResultsData } from './api'
+import { get, post, put, type AgentsStatus, type MonitorStatus, type Settings, type Trade, type Decision, type ResultsData, type AnalyticsData, type ShadowData } from './api'
 import { useWebSocket, type WSMessage } from './ws'
 import { Sidebar, type Page } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { Analyze } from './pages/Analyze'
+import { AnalyticsPage } from './pages/Analytics'
 import { SettingsPage } from './pages/Settings'
 import { ListPage } from './pages/List'
 
-const PAGES: Page[] = ['dashboard', 'analyze', 'settings', 'list']
+const PAGES: Page[] = ['dashboard', 'analyze', 'analytics', 'settings', 'list']
 
 function pageFromHash(): Page {
   const h = location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0] as Page
@@ -23,6 +24,8 @@ export default function App() {
   const [neutrals, setNeutrals] = useState<Decision[]>([])
   const [trades, setTrades] = useState<Trade[]>([])
   const [results, setResults] = useState<ResultsData | null>(null)
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [shadow, setShadow] = useState<ShadowData | null>(null)
   const [activity, setActivity] = useState<string[]>([])
   const [log, setLog] = useState<string[]>([])
   const [connected, setConnected] = useState(false)
@@ -30,15 +33,18 @@ export default function App() {
 
   const refresh = async () => {
     try {
-      const [st, ag, se, tr, de, rs] = await Promise.all([
+      const [st, ag, se, tr, de, rs, an, sh] = await Promise.all([
         get<MonitorStatus>('/api/monitor/status'),
         get<AgentsStatus>('/api/agents'),
         get<Settings>('/api/settings'),
         get<Trade[]>('/api/trades?n=30'),
         get<Decision[]>('/api/decisions?n=100'),
         get<ResultsData>('/api/results?n=200'),
+        get<AnalyticsData>('/api/analytics'),
+        get<ShadowData>('/api/analytics/shadow'),
       ])
       setStatus(st); setAgents(ag); setSettings(se); setTrades(tr); setResults(rs)
+      setAnalytics(an); setShadow(sh)
       setSignals(de.filter(d => d.action === 'CALL' || d.action === 'PUT').slice(0, 40))
       setNeutrals(de.filter(d => d.action === 'NEUTRAL').slice(0, 40))
     } catch (e) { setError(String(e)) }
@@ -123,9 +129,12 @@ export default function App() {
               results={results} agents={agents} activity={activity} log={log}
               nextCountdown={nextCountdown} />
           )}
-          {page === 'analyze' && (
+{page === 'analyze' && (
             <Analyze decisions={[...signals, ...neutrals]} trades={results?.trades ?? trades}
               results={results} agents={agents} status={status} />
+          )}
+          {page === 'analytics' && (
+            <AnalyticsPage analytics={analytics} shadow={shadow} />
           )}
           {page === 'settings' && (
             <SettingsPage settings={settings} status={status}

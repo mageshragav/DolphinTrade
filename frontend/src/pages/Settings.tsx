@@ -79,6 +79,18 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
                 )}
               </>
             )}
+            <div className="cfg-row"><label>Trade mode</label>
+              <select value={form.trade_mode || 'dry'}
+                onChange={e => onSave({ trade_mode: e.target.value as any })}>
+                <option value="dry">Dry (record only)</option>
+                <option value="shadow">Shadow (paper ledger)</option>
+                <option value="live">Live (real orders)</option>
+              </select>
+              <span className="hint" style={{ margin: 0 }}>
+                {form.trade_mode === 'live' ? 'places real broker orders' :
+                 form.trade_mode === 'shadow' ? 'settles a paper ledger from live candles' :
+                 'records decisions, no broker'}</span>
+            </div>
             <div className="cfg-row"><label>Dry run</label>
               <input type="checkbox" checked={!!form.dry_run}
                 onChange={e => setForm(fm => ({ ...fm, dry_run: e.target.checked }))} /></div>
@@ -122,7 +134,8 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
         </Card>
         <div className="cfg-actions">
           <button onClick={() => settings && onSave({
-            dry_run: !!form.dry_run, theta: Number(form.theta), combos: String(form.combos),
+            dry_run: !!form.dry_run, trade_mode: (form.trade_mode || 'dry') as any,
+            theta: Number(form.theta), combos: String(form.combos),
             hours_window: String(form.hours_window), pairs: String(form.pairs),
             max_trades_per_day: Number(form.max_trades_per_day),
             max_daily_loss_pct: Number(form.max_daily_loss_pct),

@@ -1,4 +1,4 @@
-"""Persistence helpers: decisions, trades, agent events, signals, settings."""
+"""Persistence helpers: decisions, trades, agent events, signals, settings, candles."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -47,7 +47,8 @@ async def record_trade(session: AsyncSession, t: dict) -> models.Trade:
         broker_ref=t.get('broker_ref'), broker_status=t.get('broker_status'),
         winperc=t.get('winperc'), order_type=t.get('order_type', 'binary'),
         placed_ts=t.get('placed_ts'),
-        dry_run=t.get('dry_run', True), stake=t.get('stake', 0.0), reason=t.get('reason', ''))
+        dry_run=t.get('dry_run', True), shadow=t.get('shadow', False),
+        stake=t.get('stake', 0.0), reason=t.get('reason', ''))
     await add(row, session)
     return row
 
@@ -196,3 +197,112 @@ async def trade_exists(session: AsyncSession, symbol: str, candle_close: str, ac
         models.Trade.status != 'cancelled')
     rows = (await session.execute(q)).scalars().all()
     return len(rows) > 0
+
+
+# ---------------------------------------------------------------------------
+# candle archive (OHLCV history for backtests / analytics)
+# ---------------------------------------------------------------------------
+
+def _candle_field(row, short, long_, default=None):
+    v = row.get(short)
+    if v is None:
+        v = row.get(long_)
+    if v is None:
+        return default
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+async def archive_candles(session: AsyncSession, df, interval: int = 300) -> int:
+    """Append live OHLCV rows to the archive. Idempotent: bars already present
+    for (symbol, bar-ts, interval) are skipped. Returns rows inserted.
+
+    Accepts either the broker wire frame (t/o/h/l/c/v + symbol) or the
+    normalized frame (datetime/open/high/low/close + symbol).
+    """
+    import pandas as pd
+    if df is None or getattr(df, 'empty', True):
+        return 0
+    raw = df.copy()
+    if 'datetime' not in raw.columns and 't' in raw.columns:
+        raw['datetime'] = pd.to_datetime(raw['t'], unit='s', utc=True)
+    elif 'datetime' in raw.columns:
+        raw['datetime'] = pd.to_datetime(raw['datetime'])
+    raw['datetime'] = pd.to_datetime(raw['datetime'])
+    if raw['datetime'].dt.tz is not None:
+        raw['datetime'] = raw['datetime'].dt.tz_convert('UTC').dt.tz_localize(None)
+    if 'symbol' not in raw.columns:
+        return 0
+
+    cands = []
+    for _, r in raw.iterrows():
+        ts = r['datetime']
+        cands.append({
+            'symbol': str(r['symbol']),
+            'ts': ts.to_pydatetime(),
+            'interval': interval,
+            'open': _candle_field(r, 'o', 'open'),
+            'high': _candle_field(r, 'h', 'high'),
+            'low': _candle_field(r, 'l', 'low'),
+            'close': _candle_field(r, 'c', 'close'),
+            'volume': _candle_field(r, 'v', 'volume', 0.0) or 0.0,
+        })
+    if not cands:
+        return 0
+
+    symbols = {c['symbol'] for c in cands}
+    ts_min = min(c['ts'] for c in cands)
+    ts_max = max(c['ts'] for c in cands)
+    q = select(models.Candle.symbol, models.Candle.ts, models.Candle.interval).where(
+        models.Candle.symbol.in_(symbols),
+        models.Candle.interval == interval,
+        models.Candle.ts >= ts_min,
+        models.Candle.ts <= ts_max)
+    existing = {(r.symbol, r.ts, r.interval) for r in (await session.execute(q)).all()}
+    fresh = [models.Candle(**c) for c in cands
+             if (c['symbol'], c['ts'], c['interval']) not in existing]
+    if fresh:
+        session.add_all(fresh)
+        await session.commit()
+    return len(fresh)
+
+
+async def load_candles(session: AsyncSession, symbols=None, start=None, end=None,
+                       interval: int = 300):
+    """Load archived candles as a normalized DataFrame (symbol, datetime UTC,
+    open/high/low/close/volume) ordered by symbol+ts. Empty frame when none."""
+    import pandas as pd
+    q = select(models.Candle).where(models.Candle.interval == interval)
+    if symbols:
+        q = q.where(models.Candle.symbol.in_(symbols))
+    if start is not None:
+        q = q.where(models.Candle.ts >= start)
+    if end is not None:
+        q = q.where(models.Candle.ts < end)
+    q = q.order_by(models.Candle.symbol, models.Candle.ts)
+    rows = list((await session.execute(q)).scalars().all())
+    if not rows:
+        return pd.DataFrame(columns=['symbol', 'datetime', 'open', 'high',
+                                     'low', 'close', 'volume'])
+    return pd.DataFrame([{
+        'symbol': r.symbol, 'datetime': r.ts.replace(tzinfo=timezone.utc),
+        'open': r.open, 'high': r.high,
+        'low': r.low, 'close': r.close, 'volume': r.volume,
+    } for r in rows])
+
+
+async def candle_stats(session: AsyncSession) -> dict:
+    """Archive size + coverage (bars per symbol, earliest/latest ts)."""
+    rows = (await session.execute(
+        select(models.Candle.symbol, func.count(models.Candle.id),
+               func.min(models.Candle.ts), func.max(models.Candle.ts))
+        .group_by(models.Candle.symbol))).all()
+    total = sum(r[1] for r in rows) if rows else 0
+    return {
+        'total_candles': total,
+        'symbols': len(rows) if rows else 0,
+        'by_symbol': {r[0]: {'count': r[1], 'first': str(r[2]), 'last': str(r[3])}
+                      for r in rows},
+    }

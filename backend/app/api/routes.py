@@ -46,7 +46,7 @@ def trade_to_dict(t) -> dict:
         'status': t.status, 'exit_price': t.exit_price, 'result': t.result,
         'broker_ref': t.broker_ref, 'broker_status': t.broker_status,
         'winperc': t.winperc, 'order_type': t.order_type,
-        'dry_run': t.dry_run, 'stake': t.stake,
+        'dry_run': t.dry_run, 'shadow': t.shadow, 'stake': t.stake,
         'reason': t.reason,
     }
 
@@ -63,10 +63,12 @@ async def monitor_status(session: AsyncSession = Depends(get_db)):
     trades = await persistence.trades_today(session)
     losses = await persistence.losses_today(session)
     sch = RUNTIME['scheduler']
+    drift = await risk_svc.circuit_breaker_status(session)
     return {
         'running': bool(sch and sch.running),
         'kill_switch': killed,
         'dry_run': limits.get('dry_run', True),
+        'trade_mode': limits.get('trade_mode', 'dry'),
         'trades_today': trades,
         'losses_today': round(losses, 2),
         'max_trades_per_day': limits.get('max_trades_per_day'),
@@ -85,6 +87,7 @@ async def monitor_status(session: AsyncSession = Depends(get_db)):
         'news_events': len(RUNTIME['runtime'].news.events) if RUNTIME['runtime'] else 0,
         'token_ok': token_ok(),
         'token_expires_at': str(token_expiry()) if token_expiry() else None,
+        'drift': drift,
     }
 
 
@@ -121,6 +124,68 @@ async def get_instruments_api():
             'profitability': snap['profitability'],
             'pairs': sorted(p for p, v in snap['profitability'].items()
                             if v and v >= 50)}
+
+
+@router.get('/candles/stats')
+async def candle_stats_api(session: AsyncSession = Depends(get_db)):
+    """Historical OHLCV archive size + per-symbol coverage."""
+    return await persistence.candle_stats(session)
+
+
+class BacktestRequest(BaseModel):
+    combos: str | None = None            # '5m:15m,15m:1h' (defaults to settings)
+    theta: float | None = None
+    start: str | None = None             # ISO date/time (UTC)
+    end: str | None = None
+    order_types: list[str] | None = None  # ['binary'] | ['multiplier'] | both
+    stake_pct: float | None = None
+    equity: float | None = None
+    cooldown_min: int | None = None
+    max_trades_per_day: int | None = None
+
+
+@router.post('/backtest/run')
+async def backtest_run(body: BacktestRequest, session: AsyncSession = Depends(get_db)):
+    """Replay archived candles through the production decision pipeline and
+    return a simulated trade log, equity curve and per-group stats."""
+    import asyncio
+    from app.trading.scheduler import parse_combos
+    from app.connectors import instruments
+
+    settings = get_settings()
+    combos = parse_combos(body.combos or settings.combos)
+    candles = await persistence.load_candles(
+        session, start=body.start, end=body.end)
+    if candles.empty:
+        return {'ok': False, 'msg': 'no archived candles in the requested window '
+                                    '(the live bot archives 5m bars on every cycle)'}
+    rt = RUNTIME.get('runtime')
+    ml = rt.ml if rt is not None else None
+    if ml is None:
+        from dolphin.ml_service import DecisionService
+        ml = DecisionService(theta=body.theta if body.theta is not None else 0.65)
+
+    from app.backtest.engine import run_backtest_sync
+    kwargs = {
+        'combos': combos,
+        'order_types': body.order_types or ['binary'],
+        'instruments_payout': instruments.payout_for,
+    }
+    for f in ('theta', 'stake_pct', 'equity', 'cooldown_min', 'max_trades_per_day'):
+        v = getattr(body, f)
+        if v is not None:
+            kwargs[f] = v
+    result = await asyncio.to_thread(run_backtest_sync, ml, candles, **kwargs)
+    result['ok'] = True
+    # auto-save the benchmark for the drift monitor when the sample is large
+    # enough to be meaningful (>= 20 settled trades)
+    summary = result.get('summary', {})
+    if summary.get('settled', 0) >= 20:
+        await risk_svc.set_benchmark(
+            session, summary['win_rate'] or 0.6, 'backtest',
+            trades=summary['settled'])
+        result['benchmark_saved'] = True
+    return result
 
 
 @router.get('/accounts')
@@ -268,6 +333,51 @@ async def demo_seed(session: AsyncSession = Depends(get_db)):
     return {'ok': True, 'seeded': len(samples)}
 
 
+@router.get('/analytics')
+async def analytics_api(session: AsyncSession = Depends(get_db)):
+    """Full performance analytics: equity curve, streaks, heatmaps, drift."""
+    from app.services import analytics as analytics_svc
+    return await analytics_svc.analytics(session)
+
+
+@router.get('/analytics/report')
+async def analytics_report_api(session: AsyncSession = Depends(get_db)):
+    """Generate the nightly report text without sending it (preview)."""
+    from app.services import analytics as analytics_svc
+    a = await analytics_svc.analytics(session)
+    return {'report': analytics_svc.build_nightly_report(a)}
+
+
+@router.get('/analytics/shadow')
+async def analytics_shadow(session: AsyncSession = Depends(get_db)):
+    """Shadow (paper) ledger vs live vs dry-run - win rate + net PnL side by side."""
+    trades = await persistence.last_trades(session, n=500)
+
+    def summarize(rows):
+        settled = [t for t in rows if t.result in ('WIN', 'LOSS')]
+        if not settled:
+            return {'trades': len(rows), 'settled': 0, 'win_rate': None,
+                    'net_pnl': 0.0, 'profit_factor': None}
+        wins = sum(1 for t in settled if t.result == 'WIN')
+        gross_win = sum(t.stake * (t.winperc or 0) / 100 for t in settled if t.result == 'WIN')
+        gross_loss = sum(t.stake for t in settled if t.result == 'LOSS')
+        pnl = gross_win - gross_loss
+        return {'trades': len(rows), 'settled': len(settled),
+                'win_rate': round(wins / len(settled), 4),
+                'net_pnl': round(pnl, 2),
+                'profit_factor': round(gross_win / gross_loss, 3) if gross_loss else None}
+
+    shadow = [t for t in trades if t.shadow]
+    live = [t for t in trades if not t.shadow and not t.dry_run]
+    dry = [t for t in trades if t.dry_run and not t.shadow]
+    return {
+        'shadow': summarize(shadow),
+        'live': summarize(live),
+        'dry': summarize(dry),
+        'shadow_count': len(shadow), 'live_count': len(live), 'dry_count': len(dry),
+    }
+
+
 @router.get('/results')
 async def results(n: int = 200, session: AsyncSession = Depends(get_db)):
     """Aggregated results tracking: summary stats + recent trades."""
@@ -354,6 +464,7 @@ async def agent_events(n: int = 50, session: AsyncSession = Depends(get_db)):
 
 class SettingsUpdate(BaseModel):
     dry_run: bool | None = None
+    trade_mode: str | None = None       # live | dry | shadow
     max_trades_per_day: int | None = None
     max_daily_loss_pct: float | None = None
     symbol_cooldown_min: int | None = None
@@ -385,7 +496,8 @@ async def get_settings_api(session: AsyncSession = Depends(get_db)):
     limits = await risk_svc.get_limits(session)
     s = get_settings()
     return {
-        'dry_run': limits.get('dry_run'), 'max_trades_per_day': limits.get('max_trades_per_day'),
+        'dry_run': limits.get('dry_run'), 'trade_mode': limits.get('trade_mode', 'dry'),
+        'max_trades_per_day': limits.get('max_trades_per_day'),
         'max_daily_loss_pct': limits.get('max_daily_loss_pct'),
         'symbol_cooldown_min': limits.get('symbol_cooldown_min'),
         'stake_pct': limits.get('stake_pct'), 'equity': limits.get('equity'),
@@ -410,7 +522,7 @@ async def get_settings_api(session: AsyncSession = Depends(get_db)):
 @router.put('/settings')
 async def update_settings_api(body: SettingsUpdate, session: AsyncSession = Depends(get_db)):
     limits = await risk_svc.get_limits(session)
-    for f in ['dry_run', 'max_trades_per_day', 'max_daily_loss_pct', 'symbol_cooldown_min',
+    for f in ['dry_run', 'trade_mode', 'max_trades_per_day', 'max_daily_loss_pct', 'symbol_cooldown_min',
               'stake_pct', 'equity', 'multiplicator', 'sl_tp_mode',
               'atr_sl_mult', 'atr_tp_mult', 'hw_stop_pct', 'hourly_floor',
               'hourly_floor_min',
