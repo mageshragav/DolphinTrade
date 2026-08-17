@@ -25,4 +25,4 @@ def callorput(assest: str):
         else:
             LOGGER.info('NEUTRAL')
     except Exception as e:
-        print(e.args)
+        LOGGER.exception(f'callorput failed for {assest}: {e.args}')

@@ -49,11 +49,14 @@ class SuperArrowSignalGenerator:
 
     def apply_strategy(self):
         self.df['SuperArrowSignal'] = 0
-        for i in range(len(self.df)-1, 1, -1):
+        # Chronological iteration: the state flags at bar i depend only on
+        # bars <= i, so the newest bar is always valid and no future data
+        # leaks into historical signals.
+        for i in range(1, len(self.df)):
             if i < 10:
                 continue  # Skip initial periods where sufficient data isn't available
 
-            Ld_140 = np.sum(np.abs(self.df['high'][i:i + 10] - self.df['low'][i:i + 10]))
+            Ld_140 = np.sum(np.abs(self.df['high'][i - 9:i + 1] - self.df['low'][i - 9:i + 1]))
             Ld_132 = Ld_140 / 10.0
             Ld_124 = 100 - 100.0 * ((Ld_132 - 0.0) / 10.0)
 

@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dolphin
+      POSTGRES_PASSWORD: dolphin
+      POSTGRES_DB: dolphintrade
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dolphin"]
+      interval: 5s
+      retries: 20
+
+  backend:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DT_DATABASE_URL: postgresql+asyncpg://dolphin:dolphin@db:5432/dolphintrade
+      DT_DRY_RUN: ${DT_DRY_RUN:-true}
+      DT_GEMINI_API_KEY: ${DT_GEMINI_API_KEY:-}
+      DT_TELEGRAM_BOT_TOKEN: ${DT_TELEGRAM_BOT_TOKEN:-}
+      DT_TELEGRAM_GROUP_ID: ${DT_TELEGRAM_GROUP_ID:-}
+      DT_THETA: ${DT_THETA:-0.65}
+      DT_COMBOS: ${DT_COMBOS:-5m:15m,5m:30m,5m:1h,15m:1h,30m:1h}
+      DT_HOURS_WINDOW: ${DT_HOURS_WINDOW:-all}
+      DT_PAIRS: ${DT_PAIRS:-EURUSD,EURJPY,GBPUSD,USDCAD,USDJPY,EURAUD,EURCAD,EURGBP}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

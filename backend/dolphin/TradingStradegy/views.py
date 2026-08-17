@@ -48,16 +48,21 @@ class MLTradingPrediction:
     def apply_mt_4_algorithms(self, df, stradegy=1):
         return self.client.main(df,self.timing,stradegy=stradegy)
 
-    def predict(self, strategy, input_data,resouce):
+    def predict(self, strategy, input_data, resouce):
         rf_model = self.rf_models.get(strategy)
         xgb_model = self.xgb_models.get(strategy)
-        data = input_data[resouce]
         if not rf_model or not xgb_model:
             return 0
-        rfmodel_output = rf_model.predict(data)
-        xgmodel_output = xgb_model.predict(data)
-        input_data['rf_model'] = rfmodel_output
-        input_data['xg_model'] = xgmodel_output
+        # Feature rows are NaN during indicator warm-up; predict only on
+        # valid rows. The last valid row is the newest candle.
+        features = input_data[resouce]
+        valid = features.dropna()
+        if valid.empty:
+            return 0
+        rfmodel_output = rf_model.predict(valid)
+        xgmodel_output = xgb_model.predict(valid)
+        input_data.loc[valid.index, 'rf_model'] = rfmodel_output
+        input_data.loc[valid.index, 'xg_model'] = xgmodel_output
         input_data.to_csv(f'/tmp/{strategy}_{self.pair}.csv')
         rf_result = rfmodel_output[-1]
         xgb_result = xgmodel_output[-1]
@@ -78,37 +83,38 @@ class MLTradingPrediction:
         #     prediction_2 = self.fifteen_min_strategy_15_min_chart()
 
         if prediction in [1, 2] or prediction_2 in [1, 2]:
+            final_prediction = prediction if prediction in [1, 2] else prediction_2
             if not OlympTrade.objects.filter(asset=self.pair, created_at__gte=datetime.now()-timedelta(seconds=timing_seconds)).exists():
                 OlympTrade.objects.create(asset=self.pair, created_at=datetime.now())
-                direction = 'up' if prediction == 1 else 'down'
+                direction = 'up' if final_prediction == 1 else 'down'
                 self.client.olymp_client.get_bet(direction, self.pair, amount=amount, duration=str(timing_seconds))
                 self.client.olymp_client.disconnect()
-                return prediction
+                return final_prediction
         self.client.olymp_client.disconnect()
         return 0
 
     def five_min_strategy_5_min_chart(self):
-        strategy_resource = ['SuperSignalV3', 'SuperSignalV2', 'BinaryArrow', 'TMSignal']
-        five_min_data = self.get_candle_data(self.pair, 300) # 5 min in seconds
-        data = self.apply_mt_4_algorithms(five_min_data.iloc[::-1])
+        strategy_resource = self.client.get_signal_features(stradegy=1)
+        five_min_data = self.get_candle_data(self.pair, 300) # 300 five-minute candles
+        data = self.apply_mt_4_algorithms(five_min_data)
         data.to_csv('/tmp/five_min_data.csv')
         last_five = data.iloc[-4:]
         LOGGER.info(f'{self.pair} and data is \n {last_five}')
-        return self.predict('5_min', data[strategy_resource])
+        return self.predict('5_min', data, resouce=strategy_resource)
 
     def fifteen_min_strategy_5_min_chart(self):
-        strategy_resource = ['SuperSignalV3', 'SuperSignalV2', 'BinaryArrow', 'TMSignal']
-        five_min_data = self.get_candle_data(self.pair, 300) # 5 min in seconds
-        data = self.apply_mt_4_algorithms(five_min_data.iloc[::-1])
+        strategy_resource = self.client.get_signal_features(stradegy=1)
+        five_min_data = self.get_candle_data(self.pair, 300) # 300 five-minute candles
+        data = self.apply_mt_4_algorithms(five_min_data)
         data.to_csv('/tmp/fifteen_min_data_1.csv')
         last_five = data.iloc[-4:]
         LOGGER.info(f'{self.pair} and data is \n {last_five}')
         return self.predict('15_min_1', data, resouce=strategy_resource)
 
     def fifteen_min_strategy_15_min_chart(self):
-        strategy_resource = ['SuperSignalV3', 'SuperSignalV2', 'BinaryArrow', 'SuperArrowSignal', 'TMSignal']
-        fifteen_min_data = self.get_candle_data(self.pair, 900) # 15 min in seconds
-        data = self.apply_mt_4_algorithms(fifteen_min_data.iloc[::-1],stradegy=2)
+        strategy_resource = self.client.get_signal_features(stradegy=2)
+        fifteen_min_data = self.get_candle_data(self.pair, 900) # 900 fifteen-minute candles
+        data = self.apply_mt_4_algorithms(fifteen_min_data, stradegy=2)
         data.to_csv('/tmp/fifteen_min_data_2.csv')
         last_five = data.iloc[-4:]
         LOGGER.info(f'{self.pair} and data is \n {last_five}')

@@ -2,7 +2,7 @@ import json
 from websocket import create_connection
 from websocket._exceptions import WebSocketConnectionClosedException
 from common.socketkey.olymptradekey import OlympTradeConnection
-from common.constants import HEADERS, OLYMP_WS
+from common.constants import HEADERS, OLYMP_WS, OLYMP_ORIGIN, OLYMP_EXTENSIONS
 import time
 import logging
 
@@ -14,7 +14,8 @@ class OlympTradeClient:
         self.connect()
 
     def connect(self):
-        self.ws = create_connection(OLYMP_WS, header=HEADERS)
+        self.ws = create_connection(OLYMP_WS, header=HEADERS, origin=OLYMP_ORIGIN,
+                                  extensions=OLYMP_EXTENSIONS)
         self.key = OlympTradeConnection(group=self.group)
         self.balance = self.key.balance
 
@@ -28,8 +29,24 @@ class OlympTradeClient:
                 self.ws.send(data)
                 response = self.ws.recv()
                 return json.loads(response)[0]['d']
-            except WebSocketConnectionClosedException:
-                self.connect()
+            except (WebSocketConnectionClosedException, BrokenPipeError,
+                    ConnectionResetError, ConnectionAbortedError, OSError) as e:
+                logger.warning(f'ws error ({e}), reconnecting...')
+                try:
+                    self.disconnect()
+                except Exception:
+                    pass
+                try:
+                    self.connect()
+                    self.ws.send(data)
+                    response = self.ws.recv()
+                    return json.loads(response)[0]['d']
+                except Exception as e2:
+                    logger.error(f'retry after reconnect failed: {e2}')
+                    try:
+                        self.disconnect()
+                    except Exception:
+                        pass
         return False
 
     def get_bet(self, direction, pair, amount="1", duration="60"):

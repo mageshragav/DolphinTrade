@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import timedelta
 # Load data from CSV
-df = pd.read_csv('common/MachineLearningModel/output/five_mins/EURUSD_5_Min_testing.csv')
+df = pd.read_csv('backend/dolphin/common/MachineLearningModel/output/five_mins/EURUSD_5_Min_testing.csv')
 
 df['datetime'] = pd.to_datetime(df['datetime'])
 df['UTC'] = df['datetime'] + timedelta(hours=5)
@@ -48,8 +48,6 @@ first_major_high = True
 def check_for_extremes(low_extreme_idx, low_extreme_price, hi_extreme_idx, hi_extreme_price, first_low, first_high, extreme_mode, min_extreme_height, min_extreme_width, current_idx, low, high, signal_type, df):
     signal = 0
     line_value = 0.0
-    if idx >= 5386:
-        print('hi')
     # Check for Bottom
     if extreme_mode > -1:
         if low < low_extreme_price:
@@ -117,7 +115,7 @@ for idx in range(0, len(df)):
     )
 
 # Save the result to a new CSV
-df.to_csv("common/MachineLearningModel/output/test_result_5.csv", index=False)
+df.to_csv("/tmp/test_result_5.csv", index=False)
 
 
 
@@ -128,7 +126,7 @@ df.to_csv("common/MachineLearningModel/output/test_result_5.csv", index=False)
 import pandas as pd
 from datetime import timedelta
 # Load data from CSV
-df = pd.read_csv('common/MachineLearningModel/output/five_mins/EURUSD_5_Min_testing.csv')
+df = pd.read_csv('backend/dolphin/common/MachineLearningModel/output/five_mins/EURUSD_5_Min_testing.csv')
 
 df['datetime'] = pd.to_datetime(df['datetime'])
 df['UTC'] = df['datetime'] + timedelta(hours=5)
@@ -293,4 +291,4 @@ for idx in range(1, len(df)):
     )
 
 # Save the result to a new CSV
-df.to_csv("common/MachineLearningModel/output/test_result_8.csv", index=False)
+df.to_csv("/tmp/test_result_8.csv", index=False)

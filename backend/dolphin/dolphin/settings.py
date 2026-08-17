@@ -138,6 +138,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 ALPHA_API_KEY = 'AI0V2OFUA8YIDWXF'
 
+LOGGER_DIR = BASE_DIR / "loggers"
+LOGGER_DIR.mkdir(exist_ok=True)
+
 BASE = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -154,7 +157,7 @@ BASE = {
         'trading': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': '/home/magesh/TrandingProjects/Project/loggers/trading_log.log',
+            'filename': str(LOGGER_DIR / 'trading_log.log'),
             'maxBytes': 1024 * 1024 * 200,  # 200 MB
             'backupCount': 10,
             'formatter': 'verbose',

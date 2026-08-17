@@ -1,97 +1,88 @@
-# DolphinTrade
+# DolphinTrade — production trading platform
 
-A comprehensive automated trading system with machine learning integration for financial markets.
+Multi-agent binary-options platform: live market analysis, real-time news,
+ML-gated signals, auto-trading on Olymp Trade, Telegram alerts, and a React
+dashboard.
 
-## Overview
+## Stack
 
-DolphinTrade is a trading automation platform that combines technical analysis indicators with machine learning models to generate trading signals. The system includes a Django backend, MT4 custom indicators, and ML-based prediction algorithms.
+- **Backend**: FastAPI (async) + SQLAlchemy 2.0 + PostgreSQL (SQLite in dev)
+- **Agents**: LangGraph workflow (market → news → headline/Gemini → risk → orchestrator → execution)
+- **ML**: XGBoost multi-timeframe models (5m/15m/30m bars × 15m/30m/1h expiries)
+- **Frontend**: React 18 + Vite + TypeScript (served by the backend)
+- **Broker**: Olymp Trade websocket (candles + bet placement + verification)
+- **Alerts**: Telegram bot (signals + `/status /trades /stop /start /limits`)
 
-## Project Structure
+## Quick start (docker)
 
-```
-DolphinTrade/
-├── backend/
-│   └── dolphin/
-│       ├── dolphin/           # Django project settings
-│       ├── TradingStradegy/   # Trading strategy implementations
-│       ├── TradingDataGeneration/  # Data processing utilities
-│       ├── users/             # User management
-│       ├── MT4Algorithms/    # MT4 indicator algorithms
-│       ├── Data/              # Market data (EURUSD csv files)
-│       └── ML models (.sav)   # Trained ML classifiers
-├── mt4indicators/
-│   └── main_indicators/       # MetaTrader 4 custom indicators
-│       ├── Super Signal v3d.mq4
-│       └── Extreme_Spike_new.mq4
-└── frontend/                  # Frontend project files
+```bash
+cp .env.example .env        # set GEMINI key, telegram token, adjust limits
+docker compose up --build
+# UI:  http://localhost:8000
 ```
 
-## Features
+Everything starts in **DRY-RUN** — signals are logged but no real bets are
+placed. Flip `DT_DRY_RUN=false` (or the Settings panel in the UI) only after
+paper validation.
 
-- **Technical Indicators**: Implementation of Super Signal, Extreme Spike, Binary Arrows, and other MT4 indicators
-- **Machine Learning**: XGBoost-based classifiers for trade prediction
-- **Multi-timeframe Analysis**: Support for 1, 5, 15, and 30-minute charts
-- **Django Backend**: REST API for trading signal management
-- **Automated Trading**: Integration with MetaTrader 4
+## Quick start (local dev)
 
-## Technology Stack
+```bash
+cd backend
+uv sync
+uv run uvicorn app.main:app --port 8000        # API + dashboard
 
-- **Backend**: Django 4.2, Python 3.x
-- **ML**: scikit-learn, XGBoost, pandas
-- **Trading**: MetaTrader 4, MT4 Indicators (MQ4)
-- **Task Queue**: Celery for async processing
-- **Database**: SQLite3 (development)
+cd frontend
+npm install && npm run dev                     # dev server with proxy
+```
 
-## Installation
+Uses SQLite by default (`dolphintrade.db`); set `DT_DATABASE_URL` for Postgres.
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend/dolphin
-   ```
+## Architecture
 
-2. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```
+React UI ──WS──► FastAPI ──► LangGraph workflow
+                       │          ├─ market agent   (8 combo models)
+                       │          ├─ news agent     (live ForexFactory)
+                       │          ├─ headline agent (Google News + Gemini)
+                       │          ├─ risk agent     (fakeout/spread checks)
+                       │          └─ orchestrator → execution
+                       ├─ scheduler  (5m/15m/30m/1h boundaries)
+                       ├─ execution  (idempotency, risk limits, dry-run)
+                       ├─ tracker    (settle at expiry, circuit breaker)
+                       └─ telegram   (signal alerts + operator commands)
+```
 
-3. Run migrations:
-   ```bash
-   python manage.py migrate
-   ```
+## Safety rails (all live-adjustable in the UI / `/stop` on Telegram)
 
-4. Start the development server:
-   ```bash
-   python manage.py runserver
-   ```
+- Dry-run mode (default ON)
+- Kill switch (blocks all bets instantly)
+- Max trades/day, max daily loss %, per-symbol cooldown
+- Idempotency: duplicate signals are never double-placed
+- Circuit breaker: pauses when realized win rate drifts from projected
 
-5. (Optional) Start Celery worker:
-   ```bash
-   celery -A dolphin worker -l info
-   ```
+## API surface
 
-## Trading Strategies
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/monitor/status` | runtime state, limits, circuit breaker |
+| `POST /api/monitor/control` | `{"action": "start"\|"stop"}` scheduler |
+| `POST /api/monitor/kill` | `{"on": true\|false}` kill switch |
+| `GET /api/decisions` · `/api/trades` · `/api/signals` | history |
+| `GET /api/agents` · `/api/agent-events` | agent context + LLM trail |
+| `GET/PUT /api/settings` | risk limits + trading config |
+| `WS /api/ws` | real-time events (decisions, trades, alerts) |
+| `GET /health` | liveness |
 
-The project implements several technical analysis strategies:
+## Tests
 
-- **Super Signal**: Trend reversal indicator
-- **Extreme Spike**: Volatility-based signal detection
-- **Binary Arrows**: Binary option signal provider
-- **TM Indicator**: Custom trend momentum indicator
+```bash
+cd backend && python -m pytest tests/ -q     # 5 passed
+```
 
-## ML Models
+## Research code
 
-Pre-trained models are available in `.sav` format:
-- `xgbclassifier_15.sav` - 15-minute prediction model
-- `combineclassifier.sav` - Combined signal classifier
-
-## Data
-
-Sample market data is included in `Data/`:
-- EURUSD_1_MIN.csv
-- EURUSD_5_MIN.csv
-- EURUSD_15_MIN.csv
-- EURUSD_30_MIN.csv
-
-## License
-
-Private - All rights reserved
+The `backend/dolphin/` directory holds the validated research pipeline
+(feature engineering, walk-forward validation, the 8 combo models). The
+platform reuses it via `ml_service.py` + `agents.py` — the model files live
+in `backend/dolphin/common/ml_model/`.

@@ -4,7 +4,7 @@ import string
 import json
 # from websocket import create_connection
 import websocket
-from common.constants import HEADERS, OLYMP_WS
+from common.constants import HEADERS, OLYMP_WS, OLYMP_ORIGIN, OLYMP_EXTENSIONS
 import logging
 
 logger = logging.getLogger('dolphin')
@@ -19,7 +19,9 @@ class OlympTradeConnection():
         self.group_id = group
 
     def get_connection(self):
-        ws = websocket.create_connection(self.host_v6,header=self.headers)
+        ws = websocket.create_connection(self.host_v6, header=self.headers,
+                                         origin=OLYMP_ORIGIN,
+                                         extensions=OLYMP_EXTENSIONS)
         key = str(self.get_wallet_key()).replace("'","\"").replace(" ","")
         ws.send(key)
         logger.info(key)
@@ -42,10 +44,35 @@ class OlympTradeConnection():
             return ''.join([random.choice(string.ascii_uppercase+string.ascii_lowercase) for n in range(size)])
         return ''.join([random.choice(string.ascii_uppercase+string.digits) for n in range(size)])
     
-    def get_bet_key(self,dir,pair,amount="1",duration="60"):
-        data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}","d":[{"amount":int(amount),"dir":str(dir),"pair":str(pair),"cat":"digital","pos":0,"source":"platform","account_id":int(self.account_id),"group":"demo","timestamp":int(time.time()),"risk_free_id":None,"duration":int(duration)}]}]
-        # forex key
-        # data = [{"t":2,"e":1032,"uuid":f"{self.generateUuid()}","d":[{"amount":5,"multiplicator":500,"dir":str(dir),"pair":str(pair),"stop_loss":{"type":"amount","value":-1,"trailing":False},"take_profit":{"type":"amount","value":1,"trailing":False},"group":"demo","account_id":2747795093}]}]
+    def get_bet_key(self, dir, pair, amount="1", duration="60"):
+        """Binary / fixed trade (verified against the live platform format)."""
+        data = [{"t":2,"e":23,"uuid":f"{self.generateUuid()}",
+                 "d":[{"amount":int(round(float(amount))),"dir":str(dir),"pair":str(pair),
+                       "cat":"digital","pos":0,"source":"platform",
+                       "account_id":int(self.account_id),"group":self.group_id,
+                       "timestamp":int(time.time()*1000),"risk_free_id":None,
+                       "is_flex":False,"duration":int(duration)}]}]
+        return data
+
+    @staticmethod
+    def _sl_tp(level):
+        """Broker-exact SL/TP shape: {"value": <price>, "type": "price"}
+        (no trailing field - matches the live platform capture)."""
+        if level is None:
+            return None
+        if isinstance(level, dict):
+            return {'value': level.get('value'), 'type': level.get('type', 'price')}
+        return {'value': level, 'type': 'price'}
+
+    def get_order_key(self, dir, pair, amount="1", multiplicator=100,
+                      stop_loss=None, take_profit=None):
+        """Multiplier trade (verified against the live platform format)."""
+        data = [{"t":2,"e":1032,"uuid":f"{self.generateUuid()}",
+                 "d":[{"amount":int(round(float(amount))),"multiplicator":int(multiplicator),
+                       "dir":str(dir),"pair":str(pair),
+                       "stop_loss":self._sl_tp(stop_loss),
+                       "take_profit":self._sl_tp(take_profit),
+                       "group":self.group_id,"account_id":int(self.account_id)}]}]
         return data
     
     def get_wallet_key(self):

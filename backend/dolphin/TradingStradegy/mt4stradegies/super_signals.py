@@ -29,8 +29,8 @@ class SuperSignalV2Generator:
     def calculate_signals(self):
         dist = self.parameters['dist']
         for i in range(dist, len(self.df)):
-            hhb = self.highest(self.df['high'].iloc[i-dist//2:i+dist//2+1], dist).iloc[-1]
-            llb = self.lowest(self.df['low'].iloc[i-dist//2:i+dist//2+1], dist).iloc[-1]
+            hhb = self.highest(self.df['high'].iloc[i - dist + 1:i + 1], dist).iloc[-1]
+            llb = self.lowest(self.df['low'].iloc[i - dist + 1:i + 1], dist).iloc[-1]
 
             # Buy signal
             if self.df['high'].iloc[i] == hhb:

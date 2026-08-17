@@ -1,5 +1,4 @@
-from TradingStradegy.mt4stradegies import binary_arrows, super_signals, super_signals_v3, tm_indicator
-from common.task import callorput
+from TradingStradegy.mt4stradegies import binary_arrows, super_signals, super_signals_v3, super_arrows, tm_indicator
 from tradingasset.models import *
 from common.socketconnect.Olymptradeconnect import OlympTradeClient
 from common.views import TradingViewApi
@@ -181,7 +180,7 @@ class OlympTradeTrigger:
         
 
     def start_trading(self, symbols='EURUSD'):
-        import random
+        from common.task import callorput
         callorput.apply_async(args=[symbols])
 
     def single_trigger(self,symbols='EURUSD'):
@@ -236,6 +235,48 @@ class OlympTradeTrigger:
 
         return html_css_content
     
+class StradegyCalculation(OlympTradeTrigger):
+    """Shared signal pipeline used by the ML trading prediction flow.
+
+    Mirrors the training pipeline exactly (same order of indicator stages,
+    chronological data, lookback-only indicators) so that train-time and
+    inference-time features are identical.
+    """
+
+    SIGNAL_FEATURES_STRATEGY_1 = ['SuperSignalV3', 'SuperSignalV2', 'BinaryArrow', 'TMSignal']
+    SIGNAL_FEATURES_STRATEGY_2 = ['SuperSignalV3', 'SuperSignalV2', 'BinaryArrow', 'SuperArrowSignal', 'TMSignal']
+
+    def _prepare(self, df: pd.DataFrame) -> pd.DataFrame:
+        data = df.copy()
+        if 'o' in data.columns and 'open' not in data.columns:
+            data = data.rename(columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'v': 'volume'})
+        if 't' in data.columns and 'datetime' not in data.columns:
+            data['datetime'] = pd.to_datetime(data['t'], unit='s')
+        data['datetime'] = pd.to_datetime(data['datetime'])
+        # Always work in chronological order (oldest first), newest last
+        return data.sort_values('datetime').reset_index(drop=True)
+
+    def _signals(self, data: pd.DataFrame, stradegy: int = 1) -> pd.DataFrame:
+        superv3 = super_signals_v3.SuperV3SignalPredictor(data.copy()).run()
+        superv2 = super_signals.SuperSignalV2Generator(superv3.reset_index(drop=True)).run()
+        binary = binary_arrows.BinaryArrowSignalPredictor(superv2.reset_index(drop=True)).run()
+        if stradegy == 2:
+            superarrow = super_arrows.SuperArrowSignalGenerator(binary.reset_index(drop=True)).run()
+            result = tm_indicator.TMIndicator(superarrow.reset_index(drop=True)).run()
+        else:
+            result = tm_indicator.TMIndicator(binary.reset_index(drop=True)).run()
+        return result
+
+    def main(self, df: pd.DataFrame, timing: str = '5_MIN', stradegy: int = 1) -> pd.DataFrame:
+        data = self._prepare(df)
+        return self._signals(data, stradegy)
+
+    def get_signal_features(self, stradegy: int = 1):
+        if stradegy == 2:
+            return list(self.SIGNAL_FEATURES_STRATEGY_2)
+        return list(self.SIGNAL_FEATURES_STRATEGY_1)
+
+
 def table_request(request):
     trigger = OlympTradeTrigger()
     value = trigger.start_trading()

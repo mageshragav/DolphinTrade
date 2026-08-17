@@ -35,9 +35,6 @@ class TMIndicator:
             sum_val = (half_length + 1) * self.df[price_column].iloc[i]
             sumw = half_length + 1
             for j in range(1, half_length + 1):
-                if i + j < len(self.df):
-                    sum_val += (half_length - j + 1) * self.df[price_column].iloc[i + j]
-                    sumw += (half_length - j + 1)
                 if i - j >= 0:
                     sum_val += (half_length - j + 1) * self.df[price_column].iloc[i - j]
                     sumw += (half_length - j + 1)
@@ -61,12 +58,12 @@ class TMIndicator:
     def calculate(self):
         return self.calculate_tma(self.half_length, self.price_column, self.bands_deviations, self.koeff)
     def run(self) -> pd.DataFrame:
-        # Generate arrows
+        # Generate arrows (current-bar only, no lookahead)
         self.tm_buffer, self.up_buffer, self.dn_buffer = self.calculate()
-        for i in range(1, len(self.df) - 1):
-            if self.df['high'].iloc[i+1] > self.up_buffer[i+1] and self.df['close'].iloc[i+1] > self.df['open'].iloc[i+1] and self.df['close'].iloc[i] < self.df['open'].iloc[i]:
+        for i in range(1, len(self.df)):
+            if self.df['high'].iloc[i] > self.up_buffer[i] and self.df['close'].iloc[i] > self.df['open'].iloc[i] and self.df['close'].iloc[i - 1] < self.df['open'].iloc[i - 1]:
                 self.up_arrow[i] = self.df['high'].iloc[i] + self.df['close'].rolling(window=20).mean().iloc[i] + self.koeff
-            if self.df['low'].iloc[i+1] < self.dn_buffer[i+1] and self.df['close'].iloc[i+1] < self.df['open'].iloc[i+1] and self.df['close'].iloc[i] > self.df['open'].iloc[i]:
+            if self.df['low'].iloc[i] < self.dn_buffer[i] and self.df['close'].iloc[i] < self.df['open'].iloc[i] and self.df['close'].iloc[i - 1] > self.df['open'].iloc[i - 1]:
                 self.dn_arrow[i] = self.df['low'].iloc[i] - self.df['close'].rolling(window=20).mean().iloc[i] - self.koeff
         # return self.df
         decimal_length = len(str(self.df['open'].iloc[0]).split('.')[1])

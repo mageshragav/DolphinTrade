@@ -25,10 +25,11 @@ class SuperV3SignalPredictor:
         df = self.data
         
         # Calculate highest and lowest values over dist1 and dist2 periods
-        df['hhb1'] = df['high'].rolling(window=self.dist1, center=True).max()
-        df['llb1'] = df['low'].rolling(window=self.dist1, center=True).min()
-        df['hhb'] = df['high'].rolling(window=self.dist2, center=True).max()
-        df['llb'] = df['low'].rolling(window=self.dist2, center=True).min()
+        # (trailing windows only - no future bars, so the last bar is valid)
+        df['hhb1'] = df['high'].rolling(window=self.dist1).max()
+        df['llb1'] = df['low'].rolling(window=self.dist1).min()
+        df['hhb'] = df['high'].rolling(window=self.dist2).max()
+        df['llb'] = df['low'].rolling(window=self.dist2).min()
         
         # Calculate ATR
         df['atr'] = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=50)
