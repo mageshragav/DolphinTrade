@@ -32,8 +32,17 @@ def classify(candles: pd.DataFrame | None) -> dict:
     if candles is None or getattr(candles, 'empty', True):
         return {'regime': 'unknown', 'theta_delta': 0.0, 'avg_trend': 0.0,
                 'avg_vol': 0.0, 'detail': {}}
+    df = candles.copy()
+    if 'o' in df.columns and 'open' not in df.columns:
+        df = df.rename(columns={'o': 'open', 'h': 'high', 'l': 'low',
+                                'c': 'close', 'v': 'volume'})
+    if 'datetime' not in df.columns and 't' in df.columns:
+        df['datetime'] = pd.to_datetime(df['t'], unit='s', utc=True)
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    if df['datetime'].dt.tz is not None:
+        df['datetime'] = df['datetime'].dt.tz_localize(None)
     detail = {}
-    for sym, g in candles.groupby('symbol'):
+    for sym, g in df.groupby('symbol'):
         g = g.sort_values('datetime')
         if len(g) < 30:
             continue

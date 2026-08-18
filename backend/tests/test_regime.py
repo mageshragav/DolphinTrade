@@ -72,3 +72,20 @@ def test_empty_frame_unknown():
     assert r['theta_delta'] == 0.0
     r2 = regime.classify(None)
     assert r2['regime'] == 'unknown'
+
+
+def test_live_wire_format_accepted():
+    """The feed hands the raw broker frame (t/o/h/l/c/v) - classify must
+    normalise it before computing indicators."""
+    import numpy as np
+    base = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    rows = []
+    for i in range(150):
+        p = 1.0 + i * 0.0004
+        rows.append({'symbol': 'FX:EURUSD',
+                     't': int(base.timestamp()) + i * 300,
+                     'o': p, 'h': p + 0.001, 'l': p - 0.001, 'c': p + 0.0001,
+                     'v': 100 + i})
+    r = regime.classify(pd.DataFrame(rows))
+    assert r['regime'] in ('trend', 'high_vol', 'mixed', 'range')
+    assert 'FX:EURUSD' in r['detail']
