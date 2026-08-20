@@ -67,8 +67,13 @@ export function CandlesPage() {
   }
 
   useEffect(() => {
-    get<{ ok: boolean; ftt_currency?: string[] }>('/api/pairs')
-      .then(r => { if (r.ok && r.ftt_currency?.length) setPairs(r.ftt_currency) })
+    get<{ ok: boolean; ftt_currency?: string[]; ftt_all?: string[]; fx_all?: string[] }>('/api/pairs')
+      .then(r => {
+        if (r.ok) {
+          const all = [...(r.ftt_all || r.ftt_currency || []), ...(r.fx_all || [])]
+          if (all.length) setPairs(all)
+        }
+      })
       .catch(() => { /* keep defaults */ })
   }, [])
 

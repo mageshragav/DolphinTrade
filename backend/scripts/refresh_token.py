@@ -26,6 +26,9 @@ import subprocess
 import sys
 import time
 import urllib.request
+from environs import env
+
+env.read_env()
 
 CDP_PORT = 9222
 PROFILE = '/tmp/olymp-chrome-profile'
@@ -249,8 +252,8 @@ def main():
     ap.add_argument('--force-login', action='store_true', help='log in even if a token exists')
     args = ap.parse_args()
 
-    email = os.environ.get('DT_OLYMP_EMAIL', '')
-    password = os.environ.get('DT_OLYMP_PASSWORD', '')
+    email = env.str('DT_OLYMP_EMAIL', '')
+    password = env.str('DT_OLYMP_PASSWORD', '')
     if not (email and password):
         print('[refresh] DT_OLYMP_EMAIL / DT_OLYMP_PASSWORD not set in env')
 

@@ -11,12 +11,23 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
   const [token, setToken] = useState('')
   const [tokenMsg, setTokenMsg] = useState('')
   const [tokenBusy, setTokenBusy] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
+  const [refreshBusy, setRefreshBusy] = useState(false)
+  const [useAllPairs, setUseAllPairs] = useState(false)
+  const [allAvailablePairs, setAllAvailablePairs] = useState<string[]>([])
   const [accounts, setAccounts] = useState<{ id: number; name: string; group: string;
     type: string; currency: string; balance: number }[] | null>(null)
 
   useEffect(() => {
     post<{ ok: boolean; accounts?: typeof accounts }>('/api/accounts').then(r => {
       if (r.ok && r.accounts) setAccounts(r.accounts)
+    }).catch(() => { /* ignore */ })
+    // Fetch all available pairs
+    post<{ ok: boolean; ftt_all?: string[]; fx_all?: string[] }>('/api/pairs').then(r => {
+      if (r.ok) {
+        const all = [...(r.ftt_all || []), ...(r.fx_all || [])]
+        setAllAvailablePairs(all)
+      }
     }).catch(() => { /* ignore */ })
   }, [])
 
@@ -40,6 +51,24 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
       setTokenMsg(`error: ${e}`)
     } finally {
       setTokenBusy(false)
+    }
+  }
+
+  const refreshToken = async () => {
+    setRefreshBusy(true); setRefreshMsg('refreshing...')
+    try {
+      const r = await post<{ ok: boolean; method?: string; msg?: string }>(
+        '/api/token/refresh', {})
+      if (r.ok) {
+        setRefreshMsg(`✓ ${r.method === 'broker_renew' ? 'Renewed via broker' : 'Headless login triggered'} - ${r.msg}`)
+      } else {
+        setRefreshMsg(`✗ ${r.msg || 'refresh failed'}`)
+      }
+      onRefresh()
+    } catch (e) {
+      setRefreshMsg(`error: ${e}`)
+    } finally {
+      setRefreshBusy(false)
     }
   }
 
@@ -115,7 +144,15 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
               <span className="hint">UTC minute of the hourly scan</span></div>
             <div className="cfg-row"><label>Combos</label><input {...f('combos')} style={{ width: 210 }} /></div>
             <div className="cfg-row"><label>Hours (UTC)</label><input {...f('hours_window')} style={{ width: 56 }} /></div>
-            <div className="cfg-row"><label>Pairs</label><input {...f('pairs')} style={{ width: 230 }} /></div>
+            <div className="cfg-row"><label>Pairs</label>
+              <input {...f('pairs')} style={{ width: 230 }} disabled={useAllPairs} />
+              <label className="chk"><input type="checkbox" checked={useAllPairs}
+                onChange={e => {
+                  setUseAllPairs(e.target.checked)
+                  if (e.target.checked && allAvailablePairs.length) {
+                    setForm(fm => ({ ...fm, pairs: allAvailablePairs.join(',') }))
+                  }
+                }} /> Use all</label></div>
           </>}
         </Card>
 
@@ -197,6 +234,14 @@ export function SettingsPage({ settings, status, onSave, onRefresh }: {
               {tokenBusy ? 'Swapping...' : 'Hot-swap token'}
             </button>
             <span className="hint" style={{ margin: 0 }}>{tokenMsg}</span>
+          </div>
+          <div className="hint" style={{ marginTop: 12 }}>Or auto-refresh your token using broker renewal (no captcha) or headless login:</div>
+          <div className="cfg-row" style={{ marginTop: 8 }}>
+            <button onClick={refreshToken} disabled={refreshBusy}
+              style={{ background: 'var(--blue)', color: '#fff' }}>
+              {refreshBusy ? '⏳ Refreshing...' : '🔄 Auto-Refresh Token'}
+            </button>
+            <span className="hint" style={{ margin: 0 }}>{refreshMsg}</span>
           </div>
         </Card>
 

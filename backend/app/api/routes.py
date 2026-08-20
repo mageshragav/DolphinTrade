@@ -1,5 +1,6 @@
 """API routers: monitor, trades, decisions, agents, settings + websocket."""
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -115,6 +116,45 @@ async def update_token_api(body: TokenUpdate):
     exp = token_expiry()
     return {'ok': ok, 'token_expires_at': str(exp) if exp else None,
             'msg': 'token updated and verified' if ok else 'token update failed'}
+
+
+@router.post('/token/refresh')
+async def refresh_token_api():
+    """Manually trigger token refresh (headless auto-login or broker renew).
+
+    Primary: tries renew_session() via broker's refresh-token endpoint (no captcha).
+    Fallback: launches refresh_token.py headless Chrome auto-login if primary fails.
+    Returns the result status (whether the scheduler's auto-refresh was triggered).
+    """
+    from app.connectors.olymp import renew_session
+    from app.runtime_ctx import RUNTIME
+
+    # Primary path: try broker's refresh-token endpoint
+    try:
+        res = await asyncio.to_thread(renew_session)
+        if res.get('ok'):
+            exp = token_expiry()
+            return {'ok': True, 'method': 'broker_renew',
+                    'token_expires_at': str(exp) if exp else None,
+                    'msg': f'Token renewed via broker (valid until {res.get("expires_at")})'}
+    except Exception as e:
+        LOGGER.warning(f'broker token renewal failed: {e}')
+
+    # Fallback: trigger headless Chrome auto-login if broker renewal failed
+    try:
+        sch = RUNTIME.get('scheduler')
+        if sch:
+            triggered = await sch._auto_refresh_token(force=True)
+            if triggered:
+                return {'ok': True, 'method': 'headless_login',
+                        'msg': 'Headless Chrome auto-login triggered (check browser logs for progress)'}
+            else:
+                return {'ok': False, 'method': 'headless_login',
+                        'msg': 'Headless login skipped: missing DT_OLYMP_EMAIL/PASSWORD or refresh_token.py not found'}
+    except Exception as e:
+        LOGGER.warning(f'headless token refresh failed: {e}')
+
+    return {'ok': False, 'msg': 'Token refresh failed - both broker renewal and headless login unavailable'}
 
 
 @router.get('/instruments')
@@ -274,16 +314,25 @@ async def get_pairs_api():
         return {'ok': False, 'msg': str(e)}
     ftt = [p.get('id') for p in (data.get('ftt_pairs') or [])]
     fx = [p.get('id') for p in (data.get('fx_pairs') or [])]
+    # ftt_currency: 6-char uppercase currency pairs only (backward compatible)
+    ftt_currency = sorted(i for i in ftt if len(i) == 6 and i.isupper()
+                          and i not in ('BRZU', 'UVXY', 'AMZN', 'AAPL',
+                                        'BMW', 'KO', 'FCE', 'BA', 'DIS',
+                                        'YM', 'FDAX', 'QID', 'IYR', 'CAT',
+                                        'CVX', 'CSCO', 'DAX', 'EURUSD_OTC')
+                          and not i.endswith('_OTC'))
+    # ftt_all: all fixed-time currency pairs (no non-currency filtering)
+    ftt_all = sorted(i for i in ftt if (len(i) == 6 and i.isupper() and not i.endswith('_OTC'))
+                     or i.endswith('_OTC'))
+    # fx_all: all multiplier/forex currency pairs
+    fx_all = sorted(fx) if fx else []
     return {
         'ok': True,
         'ftt_default': (data.get('ftt_pairs_default') or {}).get('id'),
         'fx_default': (data.get('fx_pairs_default') or {}).get('id'),
-        'ftt_currency': sorted(i for i in ftt if len(i) == 6 and i.isupper()
-                               and i not in ('BRZU', 'UVXY', 'AMZN', 'AAPL',
-                                             'BMW', 'KO', 'FCE', 'BA', 'DIS',
-                                             'YM', 'FDAX', 'QID', 'IYR', 'CAT',
-                                             'CVX', 'CSCO', 'DAX', 'EURUSD_OTC')
-                               and not i.endswith('_OTC')),
+        'ftt_currency': ftt_currency,    # backward compat: currency-only
+        'ftt_all': ftt_all,               # expanded: all fixed-time currencies
+        'fx_all': fx_all,                 # expanded: all multiplier currencies
         'ftt_count': len(ftt), 'fx_count': len(fx),
     }
 

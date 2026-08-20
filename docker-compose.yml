@@ -17,20 +17,27 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${DT_PORT:-8001}:8000"
+    env_file:
+      - backend/.env          # all DT_* secrets incl. olymp tokens + telegram
     environment:
       DT_DATABASE_URL: postgresql+asyncpg://dolphin:dolphin@db:5432/dolphintrade
       DT_DRY_RUN: ${DT_DRY_RUN:-true}
-      DT_GEMINI_API_KEY: ${DT_GEMINI_API_KEY:-}
-      DT_TELEGRAM_BOT_TOKEN: ${DT_TELEGRAM_BOT_TOKEN:-}
-      DT_TELEGRAM_GROUP_ID: ${DT_TELEGRAM_GROUP_ID:-}
       DT_THETA: ${DT_THETA:-0.65}
       DT_COMBOS: ${DT_COMBOS:-5m:15m,5m:30m,5m:1h,15m:1h,30m:1h}
       DT_HOURS_WINDOW: ${DT_HOURS_WINDOW:-all}
       DT_PAIRS: ${DT_PAIRS:-EURUSD,EURJPY,GBPUSD,USDCAD,USDJPY,EURAUD,EURCAD,EURGBP}
+    volumes:
+      - models:/app/dolphin/common/ml_model/challengers   # retrained bundles persist
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      retries: 5
+      start_period: 60s
 
 volumes:
   pgdata:
+  models:

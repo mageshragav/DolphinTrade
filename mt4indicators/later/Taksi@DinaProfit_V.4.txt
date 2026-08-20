@@ -1,0 +1,229 @@
+#property copyright "FinRaduga.Com-Апельсин"
+#property link      "www.FinRaduga.Com"
+
+#property indicator_chart_window
+#property indicator_buffers 1
+#property indicator_color1 Black
+
+extern int Luza = 1;
+extern color col_stop = Red;
+extern color col_start = Honeydew;
+extern color col_prof_1 = Fuchsia;
+extern color col_prof_2 = Yellow;
+extern color col_revers = Khaki;
+extern color col_zerro = Lime;
+extern color col_bonus = Aqua;
+int gi_108 = D'10.12.2020 03:00';
+double g_ibuf_112[];
+
+void LifeTimeSecurityCode() {
+   if (TimeCurrent() < gi_108) {
+      main();
+      return;
+   }
+   string ls_0 = "\nYour Taksi@DeltaProfit_V.3-Demo..";
+   ls_0 = ls_0 
+   + "\n1. Please follow this procedure: http://www.FinRaduga.Com";
+   ls_0 = ls_0 
+   + "\n2. Go to Download the registered version.";
+   ls_0 = ls_0 
+   + "\n5 Your have any problem, please contact:";
+   ls_0 = ls_0 
+   + "\nIf ICQ328-198-428 and FinRaduga.Com@mail.ru";
+   Comment(ls_0);
+   Print("Приобрести можно, заказав по: ICQ328-198-428 или на сайте www.FinRaduga.Com");
+   Print("А так же по mail: FinRaduga.Com@mail.ru с темой -Taksi@DinaProfit-");
+   Print("Время Демоверсии Индикатора истекло с 10.12.2020! Личная копия продукта минимум = 50$");
+}
+
+int init() {
+   SetIndexEmptyValue(0, 0.0);
+   SetIndexBuffer(0, g_ibuf_112);
+   return (0);
+}
+
+int deinit() {
+   ObjectDelete("Stop_line");
+   ObjectDelete("Stop_label");
+   ObjectDelete("Start_line");
+   ObjectDelete("Start_label");
+   ObjectDelete("Profit_Line#1");
+   ObjectDelete("Profit_Line#1_label");
+   ObjectDelete("Profit_Line#2");
+   ObjectDelete("Profit_Line#2_label");
+   ObjectDelete("Profit_Line#3");
+   ObjectDelete("Profit_Line#3_label");
+   ObjectDelete("Zerro_line");
+   ObjectDelete("Zerro_line_label");
+   ObjectDelete("Bonus_line");
+   ObjectDelete("Bonus_line_label");
+   return (0);
+}
+
+int start() {
+   LifeTimeSecurityCode();
+   return (0);
+}
+
+void main() {
+   int l_str2int_32;
+   double l_price_100;
+   double l_price_108;
+   double l_low_116;
+   double l_high_124;
+   double lda_164[10000][3];
+   string ls_unused_168;
+   int l_ind_counted_0 = IndicatorCounted();
+   int li_12 = 0;
+   int li_8 = 0;
+   int l_index_16 = 0;
+   double l_high_132 = High[950];
+   double l_low_140 = Low[950];
+   int li_24 = 950;
+   int li_28 = 950;
+   for (int li_4 = 950; li_4 >= 0; li_4--) {
+      l_low_116 = 10000000;
+      l_high_124 = -100000000;
+      for (int li_20 = li_4 + Luza; li_20 >= li_4 + 1; li_20--) {
+         if (Low[li_20] < l_low_116) l_low_116 = Low[li_20];
+         if (High[li_20] > l_high_124) l_high_124 = High[li_20];
+      }
+      if (Low[li_4] < l_low_116 && High[li_4] > l_high_124) {
+         li_8 = 2;
+         if (li_12 == 1) li_24 = li_4 + 1;
+         if (li_12 == -1) li_28 = li_4 + 1;
+      } else {
+         if (Low[li_4] < l_low_116) li_8 = -1;
+         if (High[li_4] > l_high_124) li_8 = 1;
+      }
+      if (li_8 != li_12 && li_12 != 0) {
+         if (li_8 == 2) {
+            li_8 = -li_12;
+            l_high_132 = High[li_4];
+            l_low_140 = Low[li_4];
+         }
+         l_index_16++;
+         if (li_8 == 1) {
+            lda_164[l_index_16][1] = li_28;
+            lda_164[l_index_16][2] = l_low_140;
+         }
+         if (li_8 == -1) {
+            lda_164[l_index_16][1] = li_24;
+            lda_164[l_index_16][2] = l_high_132;
+         }
+         l_high_132 = High[li_4];
+         l_low_140 = Low[li_4];
+      }
+      if (li_8 == 1) {
+         if (High[li_4] >= l_high_132) {
+            l_high_132 = High[li_4];
+            li_24 = li_4;
+         }
+      }
+      if (li_8 == -1) {
+         if (Low[li_4] <= l_low_140) {
+            l_low_140 = Low[li_4];
+            li_28 = li_4;
+         }
+      }
+      li_12 = li_8;
+   }
+   for (li_20 = 1; li_20 <= l_index_16; li_20++) l_str2int_32 = StrToInteger(DoubleToStr(lda_164[li_20][1], 0));
+   double ld_36 = lda_164[l_index_16 - 2][2];
+   double ld_44 = lda_164[l_index_16 - 1][2];
+   double ld_52 = lda_164[l_index_16][2];
+   double l_price_60 = NormalizeDouble(0.333 * (ld_44 - ld_36) + ld_52, 8);
+   double l_price_68 = NormalizeDouble(0.666 * (ld_44 - ld_36) + ld_52, 8);
+   double l_price_76 = NormalizeDouble(1.333 * (ld_44 - ld_36) + ld_52, 8);
+   double l_price_84 = NormalizeDouble(2.333 * (ld_44 - ld_36) + ld_52, 8);
+   double l_price_92 = NormalizeDouble(2.999 * (ld_44 - ld_36) + ld_52, 8);
+   if (ld_44 < ld_52) {
+      l_price_100 = NormalizeDouble(0.111 * (ld_44 - ld_36) + ld_52, 6) - (Ask - Bid);
+      l_price_108 = ld_52 + 2.0 * (Ask - Bid);
+   }
+   if (ld_44 > ld_52) {
+      l_price_100 = NormalizeDouble(0.111 * (ld_44 - ld_36) + ld_52, 6) + (Ask - Bid);
+      l_price_108 = ld_52 - 2.0 * (Ask - Bid);
+   }
+   if (ObjectFind("Stop_Line") != 0) {
+      ObjectCreate("Stop_line", OBJ_HLINE, 0, Time[0], l_price_108);
+      ObjectSet("Stop_line", OBJPROP_STYLE, STYLE_DASHDOTDOT);
+      ObjectSet("Stop_line", OBJPROP_COLOR, col_stop);
+      ObjectCreate("Stop_label", OBJ_TEXT, 0, Time[0], l_price_108);
+      ObjectSetText("Stop_label", "                             Stop", 8, "Times", col_stop);
+   } else {
+      ObjectMove("Stop_line", 0, Time[0], l_price_108);
+      ObjectMove("Stop_label", 0, Time[0], l_price_108);
+   }
+   if (ObjectFind("Start_Line") != 0) {
+      ObjectCreate("Start_line", OBJ_HLINE, 0, Time[0], l_price_100);
+      ObjectSet("Start_line", OBJPROP_STYLE, STYLE_DOT);
+      ObjectSet("Start_line", OBJPROP_COLOR, col_start);
+      ObjectCreate("Start_label", OBJ_TEXT, 0, Time[0], l_price_100);
+      ObjectSetText("Start_label", "                             Start", 8, "Times", col_start);
+   } else {
+      ObjectMove("Start_line", 0, Time[0], l_price_100);
+      ObjectMove("Start_label", 0, Time[0], l_price_100);
+   }
+   if (ObjectFind("Profit_Line#1") != 0) {
+      ObjectCreate("Profit_Line#1", OBJ_HLINE, 0, Time[0], l_price_60);
+      ObjectSet("Profit_Line#1", OBJPROP_COLOR, col_prof_1);
+      ObjectSet("Profit_Line#1", OBJPROP_WIDTH, 1);
+      ObjectSet("Profit_Line#1", OBJPROP_STYLE, STYLE_DOT);
+      ObjectCreate("Profit_Line#1_label", OBJ_TEXT, 0, Time[0], l_price_60);
+      ObjectSetText("Profit_Line#1_label", "                          Profit#1", 8, "Times", col_prof_1);
+   } else {
+      ObjectMove("Profit_Line#1", 0, Time[0], l_price_60);
+      ObjectMove("Profit_Line#1_label", 0, Time[0], l_price_60);
+   }
+   if (ObjectFind("Profit_Line#2") != 0) {
+      ObjectCreate("Profit_Line#2", OBJ_HLINE, 0, Time[0], l_price_68);
+      ObjectSet("Profit_Line#2", OBJPROP_COLOR, col_prof_2);
+      ObjectSet("Profit_Line#2", OBJPROP_WIDTH, 1);
+      ObjectSet("Profit_Line#2", OBJPROP_STYLE, STYLE_DOT);
+      ObjectCreate("Profit_Line#2_label", OBJ_TEXT, 0, Time[0], l_price_68);
+      ObjectSetText("Profit_Line#2_label", "                          Profit#2", 8, "Times", col_prof_2);
+   } else {
+      ObjectMove("Profit_Line#2", 0, Time[0], l_price_68);
+      ObjectMove("Profit_Line#2_label", 0, Time[0], l_price_68);
+   }
+   if (ObjectFind("Profit_Line#3") != 0) {
+      ObjectCreate("Profit_Line#3", OBJ_HLINE, 0, Time[0], l_price_76);
+      ObjectSet("Profit_Line#3", OBJPROP_COLOR, col_revers);
+      ObjectSet("Profit_Line#3", OBJPROP_WIDTH, 1);
+      ObjectSet("Profit_Line#3", OBJPROP_STYLE, STYLE_DOT);
+      ObjectCreate("Profit_Line#3_label", OBJ_TEXT, 0, Time[0], l_price_76);
+      ObjectSetText("Profit_Line#3_label", "                           Узелок", 8, "Times", col_revers);
+   } else {
+      ObjectMove("Profit_Line#3", 0, Time[0], l_price_76);
+      ObjectMove("Profit_Line#3_label", 0, Time[0], l_price_76);
+   }
+   if (ObjectFind("Zerro_Line") != 0) {
+      ObjectCreate("Zerro_line", OBJ_HLINE, 0, Time[0], l_price_84);
+      ObjectSet("Zerro_line", OBJPROP_COLOR, col_zerro);
+      ObjectSet("Zerro_line", OBJPROP_WIDTH, 1);
+      ObjectSet("Zerro_line", OBJPROP_STYLE, STYLE_DOT);
+      ObjectCreate("Zerro_Line_label", OBJ_TEXT, 0, Time[0], l_price_84);
+      ObjectSetText("Zerro_Line_label", "                     Profit_Max#1", 8, "Times", col_zerro);
+   } else {
+      ObjectMove("Zerro_line", 0, Time[0], l_price_84);
+      ObjectMove("Zerro_Line_label", 0, Time[0], l_price_84);
+   }
+   if (ObjectFind("Bonus_Line") != 0) {
+      ObjectCreate("Bonus_line", OBJ_HLINE, 0, Time[0], l_price_92);
+      ObjectSet("Bonus_line", OBJPROP_COLOR, col_bonus);
+      ObjectSet("Bonus_line", OBJPROP_WIDTH, 1);
+      ObjectSet("Bonus_line", OBJPROP_STYLE, STYLE_DOT);
+      ObjectCreate("Bonus_Line_label", OBJ_TEXT, 0, Time[0], l_price_92);
+      ObjectSetText("Bonus_Line_label", "                     Bonus Profit", 8, "Times", col_bonus);
+      Print(", Stop = " + DoubleToStr(l_price_108, Digits), "; Start = " + DoubleToStr(l_price_100, Digits), "; Profit#1 = " + DoubleToStr(l_price_60, Digits), "; Profit#2 = " +
+         DoubleToStr(l_price_68, Digits), "; Узелок = " + DoubleToStr(l_price_76, Digits), "; Max#1 = " + DoubleToStr(l_price_84, Digits), "; Bonus = " + DoubleToStr(l_price_92, Digits), "; Luza = " + DoubleToStr(Luza, Digits));
+      Print("Вы можете приобрести личную копию: www.FinRaduga.Com-&-ICQ328-198-428 или FinRaduga.Com@mail.ru");
+      Print("Действие Демоверсии индикатора ограничено временем до 10.12.2020!!!  Copyright-©-9.12.2008");
+   } else {
+      ObjectMove("Bonus_line", 0, Time[0], l_price_92);
+      ObjectMove("Bonus_Line_label", 0, Time[0], l_price_92);
+   }
+   Comment("www.FinRaduga.Com \n Помни о рисках!  \n Taksi@DeltaProfit_V.4-Demo", 
+   "\n Luza = " + DoubleToStr(Luza, Digits));
+}

@@ -11,6 +11,8 @@ python-multipart>=0.0.9
 pyTelegramBotAPI>=4.20
 pandas>=2.2.2
 numpy>=2.0.0
+scipy>=1.13.1
+pytz>=2024.1
 scikit-learn>=1.5.0
 xgboost>=2.0.3
 ta==0.11.0

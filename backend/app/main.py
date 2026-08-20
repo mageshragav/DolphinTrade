@@ -97,8 +97,8 @@ async def lifespan(app: FastAPI):
             left_h = (exp - datetime.now(timezone.utc)).total_seconds() / 3600.0
             if left_h < 24:
                 msg = (f'OLYMP SESSION TOKEN EXPIRES in {left_h:.0f}h '
-                       f'({exp:%Y-%m-%d %H:%M} UTC) - paste a fresh token '
-                       f'into common/constants.py and restart')
+                       f'({exp:%Y-%m-%d %H:%M} UTC) - the scheduler will '
+                       f'auto-refresh when within 12h of expiry')
                 LOGGER.warning(msg)
                 telegram.send(msg)
             else:
